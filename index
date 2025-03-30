@@ -34,7 +34,7 @@
         const plugin = new mapgl.GltfPlugin(map);
 
         // URL тестовой модели (утка)
-        const modelUrl = 'car_grad_none.glb';
+        const modelUrl = 'https://kolesov-pavel.github.io/hackathon/car_grad_none.glb';
 
         // Добавление модели в Кургане
         plugin.addModel({
