@@ -35,6 +35,7 @@
 
         // URL тестовой модели (утка)
         const modelUrl = 'https://kolesov-pavel.github.io/hackathon/car_grad_3_color.glb';
+        const modelUrl2 = 'https://kolesov-pavel.github.io/hackathon/red_cube.glb'
 
         // Добавление модели в Кургане
         plugin.addModel({
@@ -46,7 +47,16 @@
             rotateZ: 143,
             interactive: true
         });
-
+// Добавление второй модели (смещение на 0.0005° по долготе)
+        plugin.addModel({
+            modelId: 'model-2',
+            coordinates: [65,247858, 55,418225], // Смещение ~50 метров на восток
+            modelUrl: modelUrl2,
+            scale: 1.2,
+            altitude: 35,
+            rotateZ: 0,
+            interactive: true
+        });
         // Обработчики ошибок
         plugin.on('error', (error) => {
             console.error('Ошибка загрузки модели:', error);
