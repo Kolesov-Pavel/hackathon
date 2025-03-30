@@ -19,7 +19,7 @@
     <div id="container"></div>
     <script>
         // Координаты центра Кургана (площадь Ленина)
-        const kurganCenter = [65.2479772243381,55.41831866626492]; // [долгота, широта]
+        const kurganCenter = [65.24795143784473,55.41830217496961]; // [долгота, широта]
 
         // Инициализация карты
         const map = new mapgl.Map('container', {
@@ -41,9 +41,9 @@
             modelId: 'kurgan-model',
             coordinates: kurganCenter,
             modelUrl: modelUrl,
-            scale: 1,
+            scale: 1.05,
             altitude: 35, // Высота над землей
-            rotateZ: 145.14,
+            rotateZ: 145,
             interactive: true
         });
 
