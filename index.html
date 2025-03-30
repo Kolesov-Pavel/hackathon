@@ -34,14 +34,14 @@
         const plugin = new mapgl.GltfPlugin(map);
 
         // URL тестовой модели (утка)
-        const modelUrl = 'https://kolesov-pavel.github.io/hackathon/cube.glb';
+        const modelUrl = 'https://kolesov-pavel.github.io/hackathon/car_grad_none.glb';
 
         // Добавление модели в Кургане
         plugin.addModel({
             modelId: 'kurgan-model',
             coordinates: kurganCenter,
             modelUrl: modelUrl,
-            scale: 50,
+            scale: 500,
             altitude: 5, // Высота над землей
             rotateZ: 0,
             interactive: true
