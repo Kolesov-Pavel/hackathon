@@ -41,6 +41,7 @@
         const modelUrl = 'https://kolesov-pavel.github.io/hackathon/car_grad_3_color.glb';
         const modelUrl2 = 'https://kolesov-pavel.github.io/hackathon/water.glb'
         const modelUrl3 = 'https://kolesov-pavel.github.io/hackathon/big_grad_n.glb'
+        const modelUrl4 = 'https://kolesov-pavel.github.io/hackathon/home.glb'
 
         // Добавление модели в Кургане
         plugin.addModel({
@@ -70,6 +71,17 @@
             scale: 1.3,
             altitude: 35,
             rotateZ: -190,
+            interactive: true
+        });
+
+          // Добавление третьей модели (смещение на 0.0005° по долготе)
+        plugin.addModel({
+            modelId: 'model-4',
+            coordinates: [65.24824708139539,55.41833710562362], // Смещение ~50 метров на восток
+            modelUrl: modelUrl4,
+            scale: 1.1,
+            altitude: 35,
+            rotateZ: 49,
             interactive: true
         });
         // Обработчики ошибок
