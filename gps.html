@@ -1,1 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Навигационное приложение 2GIS</title>
+    <meta charset="utf-8">
+    <style>
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" id="destination" placeholder="Куда едем?">
+        <button onclick="createRoute()">Построить маршрут</button>
+    </div>
+    <div id="map"></div>
 
+    <script src="https://api.2gis.com/doc/maps/ru/api/?apiKey=fac5e226-391e-47f6-a1a8-7e629289276d"></script>
+    <script>
+        let map;
+        let userMarker;
+        let route;
+        let checkInterval;
+        const NOTIFICATION_DISTANCE = 100; // метров для уведомления
+
+        // Инициализация карты
+        DG.then(function() {
+            map = DG.map('map', {
+                center: [54.98, 82.89],
+                zoom: 13
+            });
+
+            // Отслеживание местоположения
+            navigator.geolocation.watchPosition(showPosition, positionError, {
+                enableHighAccuracy: true,
+                maximumAge: 30000,
+                timeout: 27000
+            });
+        });
+
+        function showPosition(position) {
+            const pos = [position.coords.latitude, position.coords.longitude];
+            
+            if (!userMarker) {
+                userMarker = DG.marker(pos).addTo(map);
+                map.setView(pos, 16);
+            } else {
+                userMarker.setLatLng(pos);
+            }
+            
+            checkProximity(pos);
+        }
+
+        function positionError(err) {
+            console.warn('Ошибка геолокации:', err.message);
+        }
+
+        async function createRoute() {
+            if (!userMarker) return;
+            
+            const destination = document.getElementById('destination').value;
+            const result = await DG.geocode(destination);
+            
+            if (result && result.length > 0) {
+                const endPoint = result[0].geometry.coordinates.reverse();
+                
+                if (route) map.removeLayer(route);
+                
+                route = DG.routing.route([
+                    userMarker.getLatLng(),
+                    endPoint
+                ], { color: '#3388ff' }).addTo(map);
+                
+                // Обновление маршрута при движении
+                checkInterval = setInterval(() => {
+                    route.update([userMarker.getLatLng(), endPoint]);
+                }, 5000);
+            }
+        }
+
+        function checkProximity(currentPos) {
+            if (!route) return;
+            
+            const routePoints = route.getWaypoints();
+            const currentPoint = DG.latLng(currentPos);
+            
+            routePoints.forEach(point => {
+                const distance = currentPoint.distanceTo(point.latLng);
+                if (distance < NOTIFICATION_DISTANCE) {
+                    alert(`Приближаемся к точке маршрута! Осталось ${Math.round(distance)} метров`);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
