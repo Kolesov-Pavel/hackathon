@@ -36,10 +36,8 @@
         });
 
         // Инициализация GLTF плагина
-        const plugin = new GltfPlugin(map, {
-    modelsLoadStrategy: 'waitAll',
-    modelsBaseUrl: 'https://kolesov-pavel.github.io/hackathon/',
-});
+         const plugin = new mapgl.GltfPlugin(map);
+ 
 
         // URL тестовой модели (утка)
         const modelUrl = 'https://kolesov-pavel.github.io/hackathon/car_grad_3_color.glb';
