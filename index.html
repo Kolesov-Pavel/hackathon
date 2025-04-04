@@ -50,6 +50,16 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
+     // Добавляем метку
+    L.marker(markerCoords)
+      .addTo(map)
+      .bindPopup(`<b>Координаты:</b> 71,46191406	60,06002808<br><b>Дата:</b> ${dateStr}`)
+      .openPopup();
+
+    // Опционально: добавляем слой OSM для сравнения
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
   </script>
 </body>
 </html>
