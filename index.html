@@ -45,11 +45,7 @@
       .addTo(map)
       .bindPopup(`<b>Координаты:</b> 72.21289063, 60.49416733<br><b>Дата:</b> ${dateStr}`)
       .openPopup();
-    // Добавляем метку
-     L.marker(markerCoords1)
-      .addTo(map)
-      .bindPopup(`<b>Координаты:</b> 	71,46191406	60,06002808	<br><b>Дата:</b> ${dateStr}`)
-      .openPopup();
+
     // Опционально: добавляем слой OSM для сравнения
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
