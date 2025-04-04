@@ -6,6 +6,15 @@
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 </head>
 <body>
+  <img src="https://services.sentinel-hub.com/ogc/wms/INSTANCE_ID?10084d2d-cc90-4fd3-8c37-8c6f72f892b9  
+  &SERVICE=WMS  
+  &REQUEST=GetMap  
+  &LAYERS=TRUE-COLOR-S2-L1C  
+  &BBOX=13.0,45.0,14.0,46.0  
+  &WIDTH=800  
+  &HEIGHT=600  
+  &TIME=2023-01-01/2023-01-10  
+  &FORMAT=image/png" />
   <div id="map" style="width: 800px; height: 600px;"></div>
   <script>
     const map = L.map('map').setView([45.5, 13.5], 10);
