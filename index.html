@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Карта объектов из GeoJSON</title>
+  <title>Карта объектов из JSON</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <style>
@@ -39,6 +39,20 @@
       z-index: 1000;
       text-align: center;
     }
+    .error {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,0,0,0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 5px;
+      z-index: 1000;
+      text-align: center;
+      max-width: 80%;
+      display: none;
+    }
     .mobile-controls {
       position: absolute;
       bottom: 20px;
@@ -72,9 +86,10 @@
 </head>
 <body>
   <div id="map-container">
-    <h2>Объекты на карте Sentinel-2 (SWIR)</h2>
+    <h2>Объекты на карте Sentinel-2 (Urban)</h2>
     <div id="map"></div>
     <div class="loading" id="loading">Загрузка карты...</div>
+    <div class="error" id="error"></div>
     <div class="mobile-controls" id="mobileControls">
       <div class="control-btn" id="zoomIn">+</div>
       <div class="control-btn" id="zoomOut">-</div>
@@ -99,10 +114,10 @@
       tap: isMobile ? false : true
     }).setView([60.5, 72.2], initialZoom);
 
-    // Добавление слоя Sentinel-2 (SWIR)
+    // Добавление слоя Sentinel-2 (Urban)
     const sentinelLayer = L.tileLayer(
       'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
-      'SERVICE=WMS&REQUEST=GetMap&LAYERS=SWIR&' +
+      'SERVICE=WMS&REQUEST=GetMap&LAYERS=URBAN&' +  // Urban слой для отображения зданий и дорог
       'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
       'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
       {
@@ -112,8 +127,8 @@
       }
     ).addTo(map);
 
-    // Стиль для GeoJSON объектов
-    const geojsonStyle = {
+    // Стиль для маркеров
+    const markerStyle = {
       radius: isMobile ? 8 : 6,
       fillColor: "#ff0000",
       color: "#fff",
@@ -122,36 +137,57 @@
       fillOpacity: 0.8
     };
 
-    // Функция для загрузки GeoJSON
-    function loadGeoJSON() {
-      document.getElementById('loading').textContent = 'Загрузка данных...';
+    // Функция для загрузки JSON
+    function loadJSON() {
+      const loadingElement = document.getElementById('loading');
+      const errorElement = document.getElementById('error');
+      
+      loadingElement.textContent = 'Загрузка данных...';
+      errorElement.style.display = 'none';
       
       fetch('hm.json')
         .then(response => {
           if (!response.ok) {
-            throw new Error('Ошибка загрузки GeoJSON файла');
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
           return response.json();
         })
         .then(data => {
-          console.log('Загружено объектов:', data.features.length);
+          // Проверяем, что данные в правильном формате
+          if (!data || typeof data !== 'object') {
+            throw new Error('Неверный формат данных: ожидался объект');
+          }
           
-          // Создаем GeoJSON слой с кастомным стилем
-          const geoJsonLayer = L.geoJSON(data, {
+          // Преобразуем объект в GeoJSON FeatureCollection
+          const geoJsonData = {
+            type: "FeatureCollection",
+            features: [{
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [data.Долгота, data.Широта]
+              },
+              properties: data
+            }]
+          };
+          
+          console.log('Загружены данные:', geoJsonData);
+          
+          // Создаем GeoJSON слой
+          const geoJsonLayer = L.geoJSON(geoJsonData, {
             pointToLayer: function(feature, latlng) {
-              return L.circleMarker(latlng, geojsonStyle);
+              return L.circleMarker(latlng, markerStyle);
             },
             onEachFeature: function(feature, layer) {
-              // Формируем popup-контент на основе свойств объекта
               const props = feature.properties;
               let popupContent = `<div style="max-width: ${isMobile ? '250px' : '350px'}">`;
-              
-              // Добавляем все доступные свойства в popup
-              for (const key in props) {
-                if (props.hasOwnProperty(key)) {
-                  popupContent += `<b>${key}:</b> ${props[key] || 'нет данных'}<br>`;
-                }
-              }
+              popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
+              popupContent += `<small><b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
+              popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
+              popupContent += `<b>Дата обнаружения:</b> ${props['Дата обнаружения'] || 'нет данных'}<br>`;
+              popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
+              popupContent += `<b>Площадь:</b> ${props['Площадь, га'] || 'нет данных'} га<br>`;
+              popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³</small>`;
               popupContent += `</div>`;
               
               layer.bindPopup(popupContent, {
@@ -160,21 +196,26 @@
             }
           }).addTo(map);
           
-          // Автомасштабирование
-          if (data.features.length > 0) {
-            map.fitBounds(geoJsonLayer.getBounds(), {
-              padding: isMobile ? [50, 50] : [100, 100]
-            });
-          }
+          // Центрируем карту на объекте
+          map.setView([data.Широта, data.Долгота], 14);
           
-          document.getElementById('loading').style.display = 'none';
+          loadingElement.style.display = 'none';
         })
         .catch(error => {
-          console.error('Ошибка:', error);
-          document.getElementById('loading').textContent = 'Ошибка загрузки данных';
-          setTimeout(() => {
-            document.getElementById('loading').style.display = 'none';
-          }, 3000);
+          console.error('Ошибка загрузки:', error);
+          loadingElement.style.display = 'none';
+          errorElement.textContent = `Ошибка загрузки данных: ${error.message}`;
+          errorElement.style.display = 'block';
+          
+          // Показываем координаты, которые ожидались
+          errorElement.innerHTML += `<br><br>Проверьте, что файл hm.json содержит данные в формате:<br>
+            {<br>
+              "ID карточки": 657,<br>
+              "Наименование": "...",<br>
+              "Долгота": 72.212890625,<br>
+              "Широта": 60.49416732788086,<br>
+              ...<br>
+            }`;
         });
     }
 
@@ -209,7 +250,7 @@
 
     // Инициализация
     setupMobileControls();
-    loadGeoJSON();
+    loadJSON();
   </script>
 </body>
 </html>
