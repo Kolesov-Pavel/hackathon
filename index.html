@@ -1,66 +1,79 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Sentinel-2: Дороги и здания</title>
+  <title>Карта объектов из CSV</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <style>
-    #map { width: 800px; height: 600px; margin: 20px auto; border: 1px solid #ccc; }
+    #map { width: 100%; height: 600px; margin: 20px auto; border: 1px solid #ccc; }
     h2 { text-align: center; font-family: Arial, sans-serif; }
+    .info { padding: 6px 8px; background: white; background: rgba(255,255,255,0.8); }
   </style>
 </head>
 <body>
-  <h2>Карта Sentinel-2: Дороги и здания (сегодня)</h2>
+  <h2>Объекты захламления на карте Sentinel-2</h2>
   <div id="map"></div>
 
   <script>
-    // Координаты первой метки (72.21289063, 60.49416733)
-    const markerCoords1 = [60.49416733, 72.21289063];
+    // Инициализация карты с приблизительным центром
+    const map = L.map('map').setView([60.5, 72.2], 10);
     
-    // Координаты второй метки (71.46191406, 60.06002808)
-    const markerCoords2 = [60.06002808, 71.46191406];
-    
-    // Сегодняшняя дата (формат YYYY-MM-DD)
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0];
+    // Добавление слоя Sentinel-2 (True Color)
+    const sentinelLayer = L.tileLayer(
+      'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
+      'SERVICE=WMS&REQUEST=GetMap&LAYERS=SWIR' +
+      'BBOX=71,60,73,61&WIDTH=1200&HEIGHT=800&' +
+      'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
+      {
+        attribution: 'Sentinel-2 © ESA/Sentinel Hub',
+        maxZoom: 18
+      }
+    ).addTo(map);
 
-    // Инициализация карты (центр между двумя метками)
-    const map = L.map('map').setView(
-      [(markerCoords1[0] + markerCoords2[0]) / 2, (markerCoords1[1] + markerCoords2[1]) / 2], 
-      8
-    );
+    // Создаем слой для маркеров
+    const markersLayer = L.layerGroup().addTo(map);
 
-    // Стиль SWIR для инфраструктуры (B12, B11, B4)
-    const urbanStyle = `https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?` +
-      `SERVICE=WMS` +
-      `&REQUEST=GetMap` +
-      `&LAYERS=SWIR` +
-      `&BBOX=71,60,72.5,60.6` +  // BBOX, охватывающий обе метки
-      `&WIDTH=800` +
-      `&HEIGHT=600` +
-      `&TIME=${dateStr}` +
-      `&FORMAT=image/png` +
-      `&SHOWLOGO=false`;
+    // Функция для загрузки и обработки CSV
+    function loadCSV() {
+      // В реальном коде замените на загрузку вашего файла
+      const csvData = `ID карточки,Наименование,№ в реестре,Дата обнаружения,Вид объекта,Категория земель,Муниципальное образование,Местоположение,Долгота,Широта,Тип отходов,Площадь (га),Объем (м3),Отметка о ликвидации,Дата ликвидации,Примечание,Прикреплённые файлы
+657,Захламление (06.05.2024) (9-657) (через дорогу от строения № 59 п. Сентябрьский),9-657,06.05.2024,Захламление,Земли населенных пунктов,Нефтеюганский район,через дорогу от строения № 59 п. Сентябрьский,72.21289063,60.49416733,ТКО, промышленные отходы,0.005,4,нет,,,`;
 
-    L.tileLayer(urbanStyle, {
-      attribution: 'Sentinel-2 © ESA/Sentinel Hub'
-    }).addTo(map);
+      Papa.parse(csvData, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          results.data.forEach(row => {
+            if (row.Широта && row.Долгота) {
+              const lat = parseFloat(row.Широта.replace(',', '.'));
+              const lng = parseFloat(row.Долгота.replace(',', '.'));
+              
+              // Создаем маркер
+              const marker = L.marker([lat, lng]).addTo(markersLayer);
+              
+              // Формируем popup-контент
+              let popupContent = `<b>${row.Наименование}</b><hr>`;
+              popupContent += `<b>Местоположение:</b> ${row.Местоположение}<br>`;
+              popupContent += `<b>Дата обнаружения:</b> ${row['Дата обнаружения']}<br>`;
+              popupContent += `<b>Тип отходов:</b> ${row['Тип отходов']}<br>`;
+              popupContent += `<b>Площадь:</b> ${row['Площадь (га)']} га<br>`;
+              popupContent += `<b>Объем:</b> ${row['Объем (м3)']} м³`;
+              
+              marker.bindPopup(popupContent);
+            }
+          });
+          
+          // Автоматически подгоняем карту под все маркеры
+          if (markersLayer.getLayers().length > 0) {
+            map.fitBounds(markersLayer.getBounds());
+          }
+        }
+      });
+    }
 
-    // Добавляем первую метку
-    L.marker(markerCoords1)
-      .addTo(map)
-      .bindPopup(`<b>Метка 1:</b> 72.21289063, 60.49416733<br><b>Дата:</b> ${dateStr}`)
-      .openPopup();
-
-    // Добавляем вторую метку
-    L.marker(markerCoords2)
-      .addTo(map)
-      .bindPopup(`<b>Метка 2:</b> 71.46191406, 60.06002808<br><b>Дата:</b> ${dateStr}`);
-
-    // Добавляем слой OSM для сравнения (один раз)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
+    // Загружаем данные при открытии страницы
+    loadCSV();
   </script>
 </body>
 </html>
