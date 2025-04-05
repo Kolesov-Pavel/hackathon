@@ -9,21 +9,26 @@
     #map { width: 100%; height: 600px; margin: 20px auto; border: 1px solid #ccc; }
     h2 { text-align: center; font-family: Arial, sans-serif; }
     .info { padding: 6px 8px; background: white; background: rgba(255,255,255,0.8); }
+    .custom-icon {
+      background-color: #ff0000;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
   </style>
 </head>
 <body>
-  <h2>Объекты захламления на карте Sentinel-2</h2>
+  <h2>Объекты захламления на карте Sentinel-2 (SWIR)</h2>
   <div id="map"></div>
 
   <script>
-    // Инициализация карты с приблизительным центром
-    const map = L.map('map').setView([60.5, 72.2], 10);
+    // Инициализация карты
+    const map = L.map('map').setView([60.5, 72.2], 6);
     
-    // Добавление слоя Sentinel-2 (True Color)
+    // Добавление слоя Sentinel-2 (SWIR)
     const sentinelLayer = L.tileLayer(
       'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
-      'SERVICE=WMS&REQUEST=GetMap&LAYERS=SWIR' +
-      'BBOX=71,60,73,61&WIDTH=1200&HEIGHT=800&' +
+      'SERVICE=WMS&REQUEST=GetMap&LAYERS=SWIR&' +
+      'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
       'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
       {
         attribution: 'Sentinel-2 © ESA/Sentinel Hub',
@@ -31,44 +36,68 @@
       }
     ).addTo(map);
 
+    // Создаем кастомную иконку для маркеров
+    const customIcon = L.divIcon({
+      className: 'custom-icon',
+      iconSize: [15, 15],
+      html: ''
+    });
+
     // Создаем слой для маркеров
     const markersLayer = L.layerGroup().addTo(map);
 
     // Функция для загрузки и обработки CSV
     function loadCSV() {
-      // В реальном коде замените на загрузку вашего файла
-      const csvData = `ID карточки,Наименование,№ в реестре,Дата обнаружения,Вид объекта,Категория земель,Муниципальное образование,Местоположение,Долгота,Широта,Тип отходов,Площадь (га),Объем (м3),Отметка о ликвидации,Дата ликвидации,Примечание,Прикреплённые файлы
-657,Захламление (06.05.2024) (9-657) (через дорогу от строения № 59 п. Сентябрьский),9-657,06.05.2024,Захламление,Земли населенных пунктов,Нефтеюганский район,через дорогу от строения № 59 п. Сентябрьский,72.21289063,60.49416733,ТКО, промышленные отходы,0.005,4,нет,,,`;
-
       Papa.parse('МестаНРО_для ГИС Хакатона.csv', {
         download: true,
         header: true,
         skipEmptyLines: true,
+        encoding: 'UTF-8',
         complete: function(results) {
+          console.log('Загружено записей:', results.data.length);
+          
           results.data.forEach(row => {
-            if (row.Широта && row.Долгота) {
-              const lat = parseFloat(row.Широта.replace(',', '.'));
-              const lng = parseFloat(row.Долгота.replace(',', '.'));
+            try {
+              // Преобразуем координаты, заменяя запятые на точки
+              const latStr = (row.Широта || '').toString().replace(',', '.').trim();
+              const lngStr = (row.Долгота || '').toString().replace(',', '.').trim();
               
-              // Создаем маркер
-              const marker = L.marker([lat, lng]).addTo(markersLayer);
+              const lat = parseFloat(latStr);
+              const lng = parseFloat(lngStr);
               
-              // Формируем popup-контент
-              let popupContent = `<b>${row.Наименование}</b><hr>`;
-              popupContent += `<b>Местоположение:</b> ${row.Местоположение}<br>`;
-              popupContent += `<b>Дата обнаружения:</b> ${row['Дата обнаружения']}<br>`;
-              popupContent += `<b>Тип отходов:</b> ${row['Тип отходов']}<br>`;
-              popupContent += `<b>Площадь:</b> ${row['Площадь (га)']} га<br>`;
-              popupContent += `<b>Объем:</b> ${row['Объем (м3)']} м³`;
-              
-              marker.bindPopup(popupContent);
+              if (!isNaN(lat) && !isNaN(lng) {
+                // Создаем маркер с кастомной иконкой
+                const marker = L.marker([lat, lng], {icon: customIcon}).addTo(markersLayer);
+                
+                // Формируем popup-контент
+                let popupContent = `<b>${row.Наименование || 'Объект'}</b><hr>`;
+                popupContent += `<b>ID:</b> ${row['ID карточки'] || 'нет данных'}<br>`;
+                popupContent += `<b>Местоположение:</b> ${row.Местоположение || 'нет данных'}<br>`;
+                popupContent += `<b>Дата обнаружения:</b> ${row['Дата обнаружения'] || 'нет данных'}<br>`;
+                popupContent += `<b>Тип отходов:</b> ${row['Тип отходов'] || 'нет данных'}<br>`;
+                popupContent += `<b>Площадь:</b> ${row['Площадь, га'] || 'нет данных'} га<br>`;
+                popupContent += `<b>Объем:</b> ${row['Объем, м3'] || 'нет данных'} м³`;
+                
+                marker.bindPopup(popupContent);
+              } else {
+                console.warn('Некорректные координаты:', row);
+              }
+            } catch (e) {
+              console.error('Ошибка обработки строки:', row, e);
             }
           });
           
           // Автоматически подгоняем карту под все маркеры
           if (markersLayer.getLayers().length > 0) {
             map.fitBounds(markersLayer.getBounds());
+            console.log('Маркеров добавлено:', markersLayer.getLayers().length);
+          } else {
+            console.warn('Не удалось добавить ни одного маркера');
           }
+        },
+        error: function(error) {
+          console.error('Ошибка загрузки CSV:', error);
+          alert('Ошибка загрузки файла данных. Проверьте консоль для подробностей.');
         }
       });
     }
