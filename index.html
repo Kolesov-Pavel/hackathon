@@ -137,7 +137,7 @@
       fillOpacity: 0.8
     };
 
-    // Функция для загрузки JSON
+ // Функция для загрузки JSON
     function loadJSON() {
       const loadingElement = document.getElementById('loading');
       const errorElement = document.getElementById('error');
@@ -145,80 +145,100 @@
       loadingElement.textContent = 'Загрузка данных...';
       errorElement.style.display = 'none';
       
-      fetch('hm_test.json')
+      fetch('hm.json')
         .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          return response.json();
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          return response.text(); // Сначала получаем текст для проверки
         })
-        .then(data => {
-          // Проверяем, что данные в правильном формате
-          if (!data || typeof data !== 'object') {
-            throw new Error('Неверный формат данных: ожидался объект');
-          }
-          
-          // Преобразуем объект в GeoJSON FeatureCollection
-          const geoJsonData = {
-            type: "FeatureCollection",
-            features: [{
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates: [data.Долгота, data.Широта]
+        .then(text => {
+          // Проверяем JSON на валидность
+          try {
+            // Удаляем возможные BOM-символы и лишние запятые
+            const cleanedText = text.replace(/^\uFEFF/, '').replace(/,\s*\]/g, ']');
+            const data = JSON.parse(cleanedText);
+            
+            if (!Array.isArray(data)) {
+              throw new Error("Ожидается массив объектов");
+            }
+
+            // Преобразуем в GeoJSON
+            const geoJsonData = {
+              type: "FeatureCollection",
+              features: data.map(item => ({
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [item.Долгота, item.Широта]
+                },
+                properties: item
+              }))
+            };
+
+            // Проверяем координаты
+            geoJsonData.features.forEach(feature => {
+              const coords = feature.geometry.coordinates;
+              if (isNaN(coords[0]) || isNaN(coords[1])) {
+                throw new Error(`Неверные координаты: ${coords}`);
+              }
+            });
+
+            // Создаем GeoJSON слой
+            const geoJsonLayer = L.geoJSON(geoJsonData, {
+              pointToLayer: function(feature, latlng) {
+                return L.circleMarker(latlng, {
+                  radius: 8,
+                  fillColor: "#ff0000",
+                  color: "#fff",
+                  weight: 1,
+                  opacity: 1,
+                  fillOpacity: 0.8
+                });
               },
-              properties: data
-            }]
-          };
-          
-          console.log('Загружены данные:', geoJsonData);
-          
-          // Создаем GeoJSON слой
-          const geoJsonLayer = L.geoJSON(geoJsonData, {
-            pointToLayer: function(feature, latlng) {
-              return L.circleMarker(latlng, markerStyle);
-            },
-            onEachFeature: function(feature, layer) {
-              const props = feature.properties;
-              let popupContent = `<div style="max-width: ${isMobile ? '250px' : '350px'}">`;
-              popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
-              popupContent += `<small><b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
-              popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
-              popupContent += `<b>Дата обнаружения:</b> ${props['Дата обнаружения'] || 'нет данных'}<br>`;
-              popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
-              popupContent += `<b>Площадь:</b> ${props['Площадь, га'] || 'нет данных'} га<br>`;
-              popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³</small>`;
-              popupContent += `</div>`;
-              
-              layer.bindPopup(popupContent, {
-                maxWidth: isMobile ? 300 : 400
+              onEachFeature: function(feature, layer) {
+                const props = feature.properties;
+                let popupContent = `<div style="max-width: 350px">`;
+                popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
+                popupContent += `<small>`;
+                popupContent += `<b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
+                popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
+                popupContent += `<b>Дата обнаружения:</b> ${props['Дата обнаружения'] || 'нет данных'}<br>`;
+                popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
+                popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³<br>`;
+                if (props['Отметка о ликвидации'] === 'да') {
+                  popupContent += `<b style="color:green">Ликвидирован:</b> ${props['Дата ликвидации'] || 'нет данных'}<br>`;
+                }
+                popupContent += `</small></div>`;
+                
+                layer.bindPopup(popupContent);
+              }
+            }).addTo(map);
+            
+            // Центрируем карту на объектах
+            if (geoJsonData.features.length > 0) {
+              map.fitBounds(geoJsonLayer.getBounds(), {
+                padding: [50, 50]
               });
             }
-          }).addTo(map);
-          
-          // Центрируем карту на объекте
-          map.setView([data.Широта, data.Долгота], 14);
-          
-          loadingElement.style.display = 'none';
+            
+            loadingElement.style.display = 'none';
+          } catch (e) {
+            throw new Error(`Ошибка парсинга JSON: ${e.message}`);
+          }
         })
         .catch(error => {
           console.error('Ошибка загрузки:', error);
           loadingElement.style.display = 'none';
-          errorElement.textContent = `Ошибка загрузки данных: ${error.message}`;
+          errorElement.innerHTML = `
+            <strong>Ошибка загрузки данных:</strong> ${error.message}<br><br>
+            Проверьте:<br>
+            1. Файл должен содержать валидный JSON<br>
+            2. Убедитесь, что нет лишних запятых (особенно после последнего элемента массива)<br>
+            3. Все объекты должны содержать поля "Долгота" и "Широта"<br><br>
+            <small>Подробности в консоли (F12)</small>
+          `;
           errorElement.style.display = 'block';
-          
-          // Показываем координаты, которые ожидались
-          errorElement.innerHTML += `<br><br>Проверьте, что файл hm.json содержит данные в формате:<br>
-            {<br>
-              "ID карточки": 657,<br>
-              "Наименование": "...",<br>
-              "Долгота": 72.212890625,<br>
-              "Широта": 60.49416732788086,<br>
-              ...<br>
-            }`;
         });
     }
-
     // Настройка элементов управления для мобильных
     function setupMobileControls() {
       if (!isMobile) return;
