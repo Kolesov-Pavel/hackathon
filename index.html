@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Карта объектов из CSV</title>
+  <title>Карта объектов из GeoJSON</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
   <style>
     body {
       margin: 0;
@@ -39,11 +38,6 @@
       border-radius: 5px;
       z-index: 1000;
       text-align: center;
-    }
-    .custom-icon {
-      background-color: #ff0000;
-      border-radius: 50%;
-      border: 2px solid white;
     }
     .mobile-controls {
       position: absolute;
@@ -78,7 +72,7 @@
 </head>
 <body>
   <div id="map-container">
-    <h2>Объекты захламления на карте Sentinel-2 (SWIR)</h2>
+    <h2>Объекты на карте Sentinel-2 (SWIR)</h2>
     <div id="map"></div>
     <div class="loading" id="loading">Загрузка карты...</div>
     <div class="mobile-controls" id="mobileControls">
@@ -92,17 +86,17 @@
     // Проверка типа устройства
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    // Инициализация карты с параметрами в зависимости от устройства
+    // Инициализация карты
     const initialZoom = isMobile ? 5 : 6;
     const map = L.map('map', {
-      zoomControl: !isMobile, // Отключаем стандартный zoomControl для мобильных
+      zoomControl: !isMobile,
       touchZoom: true,
       scrollWheelZoom: !isMobile,
       doubleClickZoom: true,
       boxZoom: !isMobile,
       keyboard: true,
       dragging: true,
-      tap: isMobile ? false : true // Отключаем tap для мобильных, если мешает
+      tap: isMobile ? false : true
     }).setView([60.5, 72.2], initialZoom);
 
     // Добавление слоя Sentinel-2 (SWIR)
@@ -114,114 +108,74 @@
       {
         attribution: 'Sentinel-2 © ESA/Sentinel Hub',
         maxZoom: 18,
-        detectRetina: true // Для экранов с высоким DPI
+        detectRetina: true
       }
     ).addTo(map);
 
-    // Создаем кастомную иконку для маркеров (больше для мобильных)
-    const customIcon = L.divIcon({
-      className: 'custom-icon',
-      iconSize: isMobile ? [20, 20] : [15, 15],
-      html: ''
-    });
+    // Стиль для GeoJSON объектов
+    const geojsonStyle = {
+      radius: isMobile ? 8 : 6,
+      fillColor: "#ff0000",
+      color: "#fff",
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8
+    };
 
-    // Создаем слой для маркеров
-    const markersLayer = L.layerGroup().addTo(map);
-
-    // Функция для обработки тапов на мобильных устройствах
-    function setupMobileTap() {
-      if (!isMobile) return;
-      
-      let tapTimer;
-      let lastTap = 0;
-      
-      map.on('click', function(e) {
-        const currentTime = new Date().getTime();
-        const tapLength = currentTime - lastTap;
-        
-        clearTimeout(tapTimer);
-        
-        if (tapLength < 300 && tapLength > 0) {
-          // Двойной тап - увеличиваем масштаб
-          map.setView(e.latlng, map.getZoom() + 1);
-        } else {
-          tapTimer = setTimeout(function() {
-            // Одинарный тап - ничего не делаем (popup откроется автоматически)
-          }, 300);
-        }
-        
-        lastTap = currentTime;
-      });
-    }
-
-    // Функция для загрузки и обработки CSV
-    function loadCSV() {
+    // Функция для загрузки GeoJSON
+    function loadGeoJSON() {
       document.getElementById('loading').textContent = 'Загрузка данных...';
       
-      Papa.parse('МестаНРО_для ГИС Хакатона.csv', {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        encoding: 'UTF-8',
-        complete: function(results) {
-          console.log('Загружено записей:', results.data.length);
+      fetch('hm.json')
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Ошибка загрузки GeoJSON файла');
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('Загружено объектов:', data.features.length);
           
-          let markersAdded = 0;
-          
-          results.data.forEach(row => {
-            try {
-              // Преобразуем координаты, заменяя запятые на точки
-              const latStr = (row.Широта || '').toString().replace(',', '.').trim();
-              const lngStr = (row.Долгота || '').toString().replace(',', '.').trim();
+          // Создаем GeoJSON слой с кастомным стилем
+          const geoJsonLayer = L.geoJSON(data, {
+            pointToLayer: function(feature, latlng) {
+              return L.circleMarker(latlng, geojsonStyle);
+            },
+            onEachFeature: function(feature, layer) {
+              // Формируем popup-контент на основе свойств объекта
+              const props = feature.properties;
+              let popupContent = `<div style="max-width: ${isMobile ? '250px' : '350px'}">`;
               
-              const lat = parseFloat(latStr);
-              const lng = parseFloat(lngStr);
-              
-              if (!isNaN(lat) && !isNaN(lng)) {
-                // Создаем маркер с кастомной иконкой
-                const marker = L.marker([lat, lng], {icon: customIcon}).addTo(markersLayer);
-                markersAdded++;
-                
-                // Формируем popup-контент (адаптированный для мобильных)
-                let popupContent = `<div style="max-width: ${isMobile ? '250px' : '350px'}">`;
-                popupContent += `<b>${row.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
-                popupContent += `<small><b>ID:</b> ${row['ID карточки'] || 'нет данных'}<br>`;
-                popupContent += `<b>Местоположение:</b> ${row.Местоположение || 'нет данных'}<br>`;
-                popupContent += `<b>Дата обнаружения:</b> ${row['Дата обнаружения'] || 'нет данных'}<br>`;
-                popupContent += `<b>Тип отходов:</b> ${row['Тип отходов'] || 'нет данных'}<br>`;
-                popupContent += `<b>Площадь:</b> ${row['Площадь, га'] || 'нет данных'} га<br>`;
-                popupContent += `<b>Объем:</b> ${row['Объем, м3'] || 'нет данных'} м³</small>`;
-                popupContent += `</div>`;
-                
-                marker.bindPopup(popupContent, {
-                  maxWidth: isMobile ? 300 : 400
-                });
+              // Добавляем все доступные свойства в popup
+              for (const key in props) {
+                if (props.hasOwnProperty(key)) {
+                  popupContent += `<b>${key}:</b> ${props[key] || 'нет данных'}<br>`;
+                }
               }
-            } catch (e) {
-              console.error('Ошибка обработки строки:', row, e);
+              popupContent += `</div>`;
+              
+              layer.bindPopup(popupContent, {
+                maxWidth: isMobile ? 300 : 400
+              });
             }
-          });
+          }).addTo(map);
           
-          // Автоматически подгоняем карту под все маркеры
-          if (markersAdded > 0) {
-            map.fitBounds(markersLayer.getBounds(), {
+          // Автомасштабирование
+          if (data.features.length > 0) {
+            map.fitBounds(geoJsonLayer.getBounds(), {
               padding: isMobile ? [50, 50] : [100, 100]
             });
-            console.log('Маркеров добавлено:', markersAdded);
-          } else {
-            console.warn('Не удалось добавить ни одного маркера');
           }
           
           document.getElementById('loading').style.display = 'none';
-        },
-        error: function(error) {
-          console.error('Ошибка загрузки CSV:', error);
+        })
+        .catch(error => {
+          console.error('Ошибка:', error);
           document.getElementById('loading').textContent = 'Ошибка загрузки данных';
           setTimeout(() => {
             document.getElementById('loading').style.display = 'none';
           }, 3000);
-        }
-      });
+        });
     }
 
     // Настройка элементов управления для мобильных
@@ -254,9 +208,8 @@
     }
 
     // Инициализация
-    setupMobileTap();
     setupMobileControls();
-    loadCSV();
+    loadGeoJSON();
   </script>
 </body>
 </html>
