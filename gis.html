@@ -272,7 +272,7 @@
       const error = document.getElementById('error');
       
       try {
-        const response = await fetch('hm.json?_=' + Date.now());
+        const response = await fetch('hm_test.json?_=' + Date.now());
         
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
