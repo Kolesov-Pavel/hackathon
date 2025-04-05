@@ -145,7 +145,7 @@
       loadingElement.textContent = 'Загрузка данных...';
       errorElement.style.display = 'none';
       
-      fetch('hm.json')
+      fetch('hm_test.json')
         .then(response => {
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
           return response.text(); // Сначала получаем текст для проверки
