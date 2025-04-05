@@ -117,7 +117,7 @@
     // Добавление слоя Sentinel-2 (Urban)
     const sentinelLayer = L.tileLayer(
       'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
-      'SERVICE=WMS&REQUEST=GetMap&LAYERS=URBAN&' +  // Urban слой для отображения зданий и дорог
+      'SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR-S2-L1C&' +  // Urban слой для отображения зданий и дорог
       'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
       'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
       {
