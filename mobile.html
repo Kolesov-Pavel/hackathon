@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Карта объектов из JSON</title>
+  <title>Карта объектов мусора</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <style>
     body {
       margin: 0;
       padding: 0;
       font-family: Arial, sans-serif;
+      touch-action: manipulation;
     }
     #map-container {
       position: relative;
       width: 100%;
       height: 100vh;
     }
-    #map { 
+    #map {
       width: 100%;
       height: 100%;
     }
@@ -74,6 +74,7 @@
       font-size: 14px;
       cursor: pointer;
       box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+      user-select: none;
     }
     .control-btn.active {
       background: #4CAF50;
@@ -96,7 +97,7 @@
 </head>
 <body>
   <div id="map-container">
-    <h2>Объекты на карте</h2>
+    <h2>Объекты захламления</h2>
     <div id="map"></div>
     <div class="loading" id="loading">Загрузка карты...</div>
     <div class="error" id="error"></div>
@@ -114,24 +115,28 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <script>
-    // Проверка типа устройства
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    // Инициализация карты
-    const initialZoom = isMobile ? 5 : 6;
+    // 1. Инициализация карты с fallback-центром
     const map = L.map('map', {
-      zoomControl: !isMobile,
+      zoomControl: false,
       touchZoom: true,
-      scrollWheelZoom: !isMobile,
+      scrollWheelZoom: true,
       doubleClickZoom: true,
-      boxZoom: !isMobile,
+      boxZoom: false,
       keyboard: true,
-      dragging: true,
-      tap: isMobile ? false : true
-    }).setView([60.5, 72.2], initialZoom);
+      dragging: true
+    }).setView([60.5, 72.2], 6);
+    
+    console.log("Карта инициализирована");
 
-    // Слои карты
+    // 2. Добавим временный слой OSM для проверки
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+    console.log("Добавлен слой OSM");
+
+    // 3. Слои карты Sentinel Hub
     const baseLayers = {
       "Спутник": L.tileLayer(
         'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
@@ -168,12 +173,9 @@
       )
     };
 
-    // Добавляем слой по умолчанию (Спутник)
-    baseLayers["Спутник"].addTo(map);
-
-    // Стиль для маркеров
+    // 4. Стиль для маркеров
     const markerStyle = {
-      radius: isMobile ? 8 : 6,
+      radius: 8,
       fillColor: "#ff0000",
       color: "#fff",
       weight: 1,
@@ -181,164 +183,151 @@
       fillOpacity: 0.8
     };
 
-    // Функция для загрузки JSON
-    function loadJSON() {
-      const loadingElement = document.getElementById('loading');
-      const errorElement = document.getElementById('error');
+    // 5. Загрузка данных
+    async function loadData() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
       
-      loadingElement.textContent = 'Загрузка данных...';
-      errorElement.style.display = 'none';
-      
-      fetch('hm.json')
-        .then(response => {
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          return response.text();
-        })
-        .then(text => {
-          try {
-            const cleanedText = text.replace(/^\uFEFF/, '').replace(/,\s*\]/g, ']');
-            const data = JSON.parse(cleanedText);
-            
-            if (!Array.isArray(data)) throw new Error("Ожидается массив объектов");
-
-            const geoJsonData = {
-              type: "FeatureCollection",
-              features: data.map(item => ({
-                type: "Feature",
-                geometry: {
-                  type: "Point",
-                  coordinates: [item.Долгота, item.Широта]
-                },
-                properties: item
-              }))
-            };
-
-            geoJsonData.features.forEach(feature => {
-              const coords = feature.geometry.coordinates;
-              if (isNaN(coords[0]) throw new Error(`Неверная долгота: ${coords[0]}`);
-              if (isNaN(coords[1])) throw new Error(`Неверная широта: ${coords[1]}`);
-            });
-
-            const geoJsonLayer = L.geoJSON(geoJsonData, {
-              pointToLayer: function(feature, latlng) {
-                return L.circleMarker(latlng, markerStyle);
-              },
-              onEachFeature: function(feature, layer) {
-                const props = feature.properties;
-                let popupContent = `<div style="max-width: 350px">`;
-                popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
-                popupContent += `<small>`;
-                popupContent += `<b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
-                popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
-                popupContent += `<b>Дата обнаружения:</b> ${props['Дата обнаружения'] || 'нет данных'}<br>`;
-                popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
-                popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³<br>`;
-                if (props['Отметка о ликвидации'] === 'да') {
-                  popupContent += `<b style="color:green">Ликвидирован:</b> ${props['Дата ликвидации'] || 'нет данных'}<br>`;
-                }
-                popupContent += `</small></div>`;
-                
-                layer.bindPopup(popupContent);
-              }
-            }).addTo(map);
-            
-            if (geoJsonData.features.length > 0) {
-              map.fitBounds(geoJsonLayer.getBounds(), {
-                padding: [50, 50]
-              });
+      try {
+        console.log("Начало загрузки hm.json");
+        const response = await fetch('hm_test.json?_=' + Date.now()); // Добавляем timestamp для избежания кеширования
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        console.log("Получен ответ от сервера");
+        
+        // Чистим JSON от возможных проблем
+        const cleanedText = text
+          .replace(/^\uFEFF/, '') // Удаляем BOM
+          .replace(/,\s*\]/g, ']') // Удаляем лишние запятые
+          .replace(/,\s*}/g, '}'); // Удаляем лишние запятые в объектах
+        
+        const data = JSON.parse(cleanedText);
+        console.log("JSON успешно распарсен");
+        
+        if (!Array.isArray(data)) {
+          throw new Error("Ожидается массив объектов");
+        }
+        
+        // Проверяем первый элемент
+        if (data.length === 0) {
+          throw new Error("Файл не содержит данных");
+        }
+        
+        const firstItem = data[0];
+        if (typeof firstItem.Долгота === 'undefined' || typeof firstItem.Широта === 'undefined') {
+          throw new Error("Объекты должны содержать поля 'Долгота' и 'Широта'");
+        }
+        
+        // Создаем GeoJSON слой
+        const geoJsonLayer = L.geoJSON({
+          type: "FeatureCollection",
+          features: data.map(item => ({
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [item.Долгота, item.Широта]
+            },
+            properties: item
+          }))
+        }, {
+          pointToLayer: (feature, latlng) => L.circleMarker(latlng, markerStyle),
+          onEachFeature: (feature, layer) => {
+            const props = feature.properties;
+            let popupContent = `<div style="max-width: 300px">`;
+            popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
+            popupContent += `<small>`;
+            popupContent += `<b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
+            popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
+            popupContent += `<b>Дата обнаружения:</b> ${props['Дата обнаружения'] || 'нет данных'}<br>`;
+            popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
+            popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³<br>`;
+            if (props['Отметка о ликвидации'] === 'да') {
+              popupContent += `<b style="color:green">Ликвидирован:</b> ${props['Дата ликвидации'] || 'нет данных'}<br>`;
             }
+            popupContent += `</small></div>`;
             
-            loadingElement.style.display = 'none';
-          } catch (e) {
-            throw new Error(`Ошибка парсинга JSON: ${e.message}`);
+            layer.bindPopup(popupContent);
           }
-        })
-        .catch(error => {
-          console.error('Ошибка загрузки:', error);
-          loadingElement.style.display = 'none';
-          errorElement.innerHTML = `
-            <strong>Ошибка загрузки данных:</strong> ${error.message}<br><br>
-            <small>Подробности в консоли (F12)</small>
-          `;
-          errorElement.style.display = 'block';
-        });
+        }).addTo(map);
+        
+        // Центрируем карту
+        map.fitBounds(geoJsonLayer.getBounds(), { padding: [50, 50] });
+        
+        // Включаем основной слой
+        baseLayers["Спутник"].addTo(map);
+        map.removeLayer(document.querySelector('.leaflet-tile-container img').parentElement); // Удаляем OSM
+        
+        loading.style.display = 'none';
+        console.log("Данные успешно загружены и отображены");
+        
+      } catch (err) {
+        console.error("Ошибка загрузки:", err);
+        loading.style.display = 'none';
+        error.innerHTML = `
+          <strong>Ошибка:</strong> ${err.message}<br><br>
+          Проверьте:<br>
+          1. Файл hm.json в той же папке<br>
+          2. Формат данных (должен быть массив объектов)<br>
+          3. Координаты должны быть числами<br>
+          <small>Подробности в консоли (F12 → Console)</small>
+        `;
+        error.style.display = 'block';
+      }
     }
 
-    // Переключение слоев карты
+    // 6. Управление слоями
     function setupLayerControls() {
       const satelliteBtn = document.getElementById('satelliteBtn');
       const urbanBtn = document.getElementById('urbanBtn');
       const terrainBtn = document.getElementById('terrainBtn');
       
-      function setActiveBtn(btn) {
-        [satelliteBtn, urbanBtn, terrainBtn].forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+      function setActiveLayer(layerName) {
+        // Удаляем все базовые слои
+        Object.values(baseLayers).forEach(layer => {
+          if (map.hasLayer(layer)) map.removeLayer(layer);
+        });
+        
+        // Добавляем выбранный слой
+        baseLayers[layerName].addTo(map);
+        
+        // Обновляем кнопки
+        [satelliteBtn, urbanBtn, terrainBtn].forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`${layerName.toLowerCase()}Btn`).classList.add('active');
       }
       
-      satelliteBtn.addEventListener('click', () => {
-        map.eachLayer(layer => {
-          if (layer === baseLayers["Город"] || layer === baseLayers["Местность"]) {
-            map.removeLayer(layer);
-          }
-        });
-        baseLayers["Спутник"].addTo(map);
-        setActiveBtn(satelliteBtn);
-      });
-      
-      urbanBtn.addEventListener('click', () => {
-        map.eachLayer(layer => {
-          if (layer === baseLayers["Спутник"] || layer === baseLayers["Местность"]) {
-            map.removeLayer(layer);
-          }
-        });
-        baseLayers["Город"].addTo(map);
-        setActiveBtn(urbanBtn);
-      });
-      
-      terrainBtn.addEventListener('click', () => {
-        map.eachLayer(layer => {
-          if (layer === baseLayers["Спутник"] || layer === baseLayers["Город"]) {
-            map.removeLayer(layer);
-          }
-        });
-        baseLayers["Местность"].addTo(map);
-        setActiveBtn(terrainBtn);
-      });
+      satelliteBtn.addEventListener('click', () => setActiveLayer("Спутник"));
+      urbanBtn.addEventListener('click', () => setActiveLayer("Город"));
+      terrainBtn.addEventListener('click', () => setActiveLayer("Местность"));
     }
 
-    // Настройка элементов управления для мобильных
+    // 7. Мобильные элементы управления
     function setupMobileControls() {
-      if (!isMobile) return;
-      
-      document.getElementById('zoomIn').addEventListener('click', () => {
-        map.zoomIn();
-      });
-      
-      document.getElementById('zoomOut').addEventListener('click', () => {
-        map.zoomOut();
-      });
+      document.getElementById('zoomIn').addEventListener('click', () => map.zoomIn());
+      document.getElementById('zoomOut').addEventListener('click', () => map.zoomOut());
       
       document.getElementById('locate').addEventListener('click', () => {
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              map.flyTo([pos.coords.latitude, pos.coords.longitude], 12);
-            },
-            (err) => {
-              alert('Не удалось определить местоположение: ' + err.message);
-            },
+            (pos) => map.flyTo([pos.coords.latitude, pos.coords.longitude], 14),
+            (err) => alert('Геолокация недоступна: ' + err.message),
             { enableHighAccuracy: true, timeout: 10000 }
           );
         } else {
-          alert('Геолокация не поддерживается вашим браузером');
+          alert('Ваш браузер не поддерживает геолокацию');
         }
       });
     }
 
-    // Инициализация
-    setupLayerControls();
-    setupMobileControls();
-    loadJSON();
+    // 8. Инициализация
+    document.addEventListener('DOMContentLoaded', () => {
+      setupLayerControls();
+      setupMobileControls();
+      loadData();
+    });
   </script>
 </body>
 </html>
