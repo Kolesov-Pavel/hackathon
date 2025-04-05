@@ -208,7 +208,7 @@
     let selectedMarker = null;
     const API_ENDPOINT = 'api.php'; // Файл для обработки на сервере
 
-    // 1. Инициализация карты
+    // 1. Инициализация карты с fallback-центром
     const map = L.map('map', {
       zoomControl: false,
       touchZoom: true,
@@ -218,10 +218,19 @@
       keyboard: true,
       dragging: true
     }).setView([60.5, 72.2], 6);
+    
+    console.log("Карта инициализирована");
+
+    // 2. Добавим временный слой OSM для проверки
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+    console.log("Добавлен слой OSM");
+
 
     // 2. Слои карты Sentinel Hub
-    const baseLayers = {
-     "Спутник": L.tileLayer(
+     const baseLayers = {
+      "Спутник": L.tileLayer(
         'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
         'SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR-S2-L1C&' +
         'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
