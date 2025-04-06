@@ -130,10 +130,6 @@
         padding: 15px;
       }
     }
-        /* предыдущие стили остаются без изменений */
-    .control-btn.color-toggle {
-      background: linear-gradient(45deg, #ff0000, #4CAF50);
-    }
   </style>
 </head>
 <body>
@@ -144,14 +140,11 @@
     <div class="error" id="error"></div>
     
     <div class="map-controls" id="mapControls">
-    <div class="control-btn active" id="satelliteBtn" title="Спутник">🛰</div>
-    <div class="control-btn" id="urbanBtn" title="Город">🏙</div>
-    <div class="control-btn" id="terrainBtn" title="Местность">⛰</div>
-    <div class="control-btn color-toggle" id="colorToggleBtn" title="Цвет по статусу">
-      <i class="fas fa-palette"></i>
+      <div class="control-btn active" id="satelliteBtn" title="Спутник">🛰</div>
+      <div class="control-btn" id="urbanBtn" title="Город">🏙</div>
+      <div class="control-btn" id="terrainBtn" title="Местность">⛰</div>
+      <div class="control-btn" id="addBtn" title="Добавить объект"><i class="fas fa-plus"></i></div>
     </div>
-    <div class="control-btn" id="addBtn" title="Добавить объект"><i class="fas fa-plus"></i></div>
-  </div>
     
     <div class="mobile-controls" id="mobileControls">
       <div class="control-btn" id="zoomIn">+</div>
@@ -210,75 +203,77 @@
 
   <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
   <script>
-   // Глобальные переменные
+    // Глобальные переменные
     let currentData = [];
     let selectedMarker = null;
-    let colorByStatus = false; // Флаг для переключения цветов
-    const API_ENDPOINT = 'api.php';
+    const API_ENDPOINT = 'api.php'; // Файл для обработки на сервере
 
-    // Стили для маркеров
-    const markerStyles = {
-      default: {
-        radius: 8,
-        fillColor: "#ff0000",
-        color: "#fff",
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.8
-      },
-      notCleaned: {
-        radius: 8,
-        fillColor: "#ff0000", // Красный - не ликвидирован
-        color: "#fff",
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.8
-      },
-      cleaned: {
-        radius: 8,
-        fillColor: "#4CAF50", // Зеленый - ликвидирован
-        color: "#fff",
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.8
-      }
+    // 1. Инициализация карты с fallback-центром
+    const map = L.map('map', {
+      zoomControl: false,
+      touchZoom: true,
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
+      boxZoom: false,
+      keyboard: true,
+      dragging: true
+    }).setView([60.5, 72.2], 6);
+    
+    console.log("Карта инициализирована");
+
+    // 2. Добавим временный слой OSM для проверки
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+    console.log("Добавлен слой OSM");
+
+
+    // 2. Слои карты Sentinel Hub
+     const baseLayers = {
+      "Спутник": L.tileLayer(
+        'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
+        'SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR-S2-L1C&' +
+        'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
+        'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
+        {
+          attribution: 'Sentinel-2 © ESA/Sentinel Hub',
+          maxZoom: 18,
+          detectRetina: true
+        }
+      ),
+      "Город": L.tileLayer(
+        'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
+        'SERVICE=WMS&REQUEST=GetMap&LAYERS=URBAN&' +
+        'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
+        'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
+        {
+          attribution: 'Sentinel-2 © ESA/Sentinel Hub',
+          maxZoom: 18,
+          detectRetina: true
+        }
+      ),
+      "Местность": L.tileLayer(
+        'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
+        'SERVICE=WMS&REQUEST=GetMap&LAYERS=SWIR&' +
+        'BBOX=60,65,75,55&WIDTH=1200&HEIGHT=800&' +
+        'TIME=2024-01-01/2024-05-31&FORMAT=image/jpeg&SHOWLOGO=false',
+        {
+          attribution: 'Sentinel-2 © ESA/Sentinel Hub',
+          maxZoom: 18,
+          detectRetina: true
+        }
+      )
     };
 
-    // 1. Функция для получения стиля маркера
-    function getMarkerStyle(feature) {
-      if (!colorByStatus) return markerStyles.default;
-      
-      const isCleaned = feature.properties['Отметка о ликвидации'] === 'да';
-      return isCleaned ? markerStyles.cleaned : markerStyles.notCleaned;
-    }
-
-    // 2. Обновление всех маркеров
-    function updateMarkersStyle() {
-      map.eachLayer(layer => {
-        if (layer instanceof L.CircleMarker) {
-          const feature = layer.feature;
-          const style = getMarkerStyle(feature);
-          layer.setStyle(style);
-        }
-      });
-    }
-
-    // 3. Инициализация кнопки переключения цветов
-    function setupColorToggle() {
-      document.getElementById('colorToggleBtn').addEventListener('click', () => {
-        colorByStatus = !colorByStatus;
-        updateMarkersStyle();
-        
-        // Обновляем состояние кнопки
-        const btn = document.getElementById('colorToggleBtn');
-        if (colorByStatus) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
-      });
-    }
-
+    // 3. Стиль для маркеров
+    const markerStyle = {
+      radius: 8,
+      fillColor: "#ff0000",
+      color: "#fff",
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.8
+    };
 
     // 4. Загрузка данных
     async function loadData() {
@@ -301,24 +296,23 @@
         
         // Создаем GeoJSON слой
         const geoJsonLayer = L.geoJSON({
-        type: "FeatureCollection",
-        features: currentData.map(item => ({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [item.Долгота, item.Широта]
+          type: "FeatureCollection",
+          features: currentData.map(item => ({
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [item.Долгота, item.Широта]
+            },
+            properties: item
+          }))
+        }, {
+          pointToLayer: (feature, latlng) => {
+            const marker = L.circleMarker(latlng, markerStyle);
+            marker.on('click', () => {
+              selectedMarker = feature.properties['ID карточки'];
+            });
+            return marker;
           },
-          properties: item
-        }))
-      }, {
-        pointToLayer: (feature, latlng) => {
-          const marker = L.circleMarker(latlng, getMarkerStyle(feature));
-          marker.feature = feature;
-          marker.on('click', () => {
-            selectedMarker = feature.properties['ID карточки'];
-          });
-          return marker;
-        },
           onEachFeature: (feature, layer) => {
             const props = feature.properties;
             let popupContent = `<div style="max-width: 300px">`;
@@ -617,7 +611,6 @@
       setupMobileControls();
       setupAddObject();
       setupPhotoUpload();
-      setupColorToggle();
       loadData();
     });
   </script>
