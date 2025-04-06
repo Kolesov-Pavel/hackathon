@@ -3,20 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Инвентаризация и оперативный мониторинг несанкционированных мест размещения отходов</title>
+  <title>Мониторинг мест размещения отходов</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
     body {
       margin: 0;
       padding: 0;
-      font-family: Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       touch-action: manipulation;
+      overscroll-behavior-y: none;
     }
     #map-container {
-      position: relative;
+      position: fixed;
       width: 100%;
       height: 100vh;
+      top: 0;
+      left: 0;
     }
     #map {
       width: 100%;
@@ -27,55 +34,63 @@
       padding: 10px;
       margin: 0;
       background-color: #f8f9fa;
-      font-size: 1.2rem;
+      font-size: 1rem;
+      position: fixed;
+      top: 0;
+      width: 100%;
+      z-index: 1000;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     .loading {
-      position: absolute;
+      position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.95);
       padding: 20px;
       border-radius: 5px;
-      z-index: 1000;
+      z-index: 2000;
       text-align: center;
+      max-width: 90%;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     }
     .error {
-      position: absolute;
+      position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(255,0,0,0.8);
+      background: rgba(255,0,0,0.9);
       color: white;
       padding: 20px;
       border-radius: 5px;
-      z-index: 1000;
+      z-index: 2000;
       text-align: center;
-      max-width: 80%;
-      display: none;
+      max-width: 90%;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     }
     .map-controls {
-      position: absolute;
-      top: 70px;
+      position: fixed;
+      top: 60px;
       right: 10px;
-      z-index: 500;
+      z-index: 1000;
       display: flex;
       flex-direction: column;
     }
     .control-btn {
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       background: white;
-      border-radius: 5px;
-      border: 1px solid #ccc;
+      border-radius: 50%;
+      border: 1px solid #ddd;
       margin-bottom: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
+      font-size: 18px;
       cursor: pointer;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       user-select: none;
+      touch-action: manipulation;
     }
     .control-btn.active {
       background: #4CAF50;
@@ -83,10 +98,12 @@
       border-color: #388E3C;
     }
     .mobile-controls {
-      position: absolute;
+      position: fixed;
       bottom: 20px;
       right: 10px;
-      z-index: 500;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
     }
     .modal {
       display: none;
@@ -96,16 +113,20 @@
       width: 100%;
       height: 100%;
       background: rgba(0,0,0,0.5);
-      z-index: 2000;
+      z-index: 3000;
       justify-content: center;
       align-items: center;
+      padding: 15px;
     }
     .modal-content {
       background: white;
       padding: 20px;
-      border-radius: 5px;
-      width: 90%;
+      border-radius: 10px;
+      width: 100%;
       max-width: 400px;
+      max-height: 90vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .form-group {
       margin-bottom: 15px;
@@ -113,64 +134,108 @@
     .form-group label {
       display: block;
       margin-bottom: 5px;
+      font-weight: 500;
     }
     .form-group input, .form-group textarea {
       width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
     }
     .preview-image {
       max-width: 100%;
-      max-height: 200px;
+      max-height: 150px;
       margin-top: 10px;
+      border-radius: 5px;
     }
     #search-container {
-      position: absolute;
-      top: 70px;
+      position: fixed;
+      top: 60px;
       left: 10px;
-      z-index: 500;
+      right: 60px;
+      z-index: 1000;
       background: white;
       padding: 5px;
-      border-radius: 5px;
-      box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+      border-radius: 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
     #search-input {
-      width: 200px;
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 3px;
+      width: 100%;
+      padding: 8px 15px;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      outline: none;
     }
     #search-results {
       position: absolute;
       top: 100%;
       left: 0;
-      width: 100%;
+      right: 0;
       background: white;
-      border: 1px solid #ccc;
-      border-radius: 0 0 3px 3px;
+      border-radius: 0 0 10px 10px;
       max-height: 200px;
       overflow-y: auto;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.2);
       display: none;
+      -webkit-overflow-scrolling: touch;
     }
     .search-result-item {
-      padding: 8px;
+      padding: 10px 15px;
       cursor: pointer;
       border-bottom: 1px solid #eee;
+      font-size: 14px;
     }
     .search-result-item:hover {
       background-color: #f5f5f5;
     }
-    @media (min-width: 768px) {
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button[type="button"] {
+      background: #f44336;
+    }
+    .leaflet-popup-content {
+      max-height: 60vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .leaflet-popup-content img {
+      max-width: 100%;
+      height: auto;
+    }
+    
+    /* Оптимизация для маленьких экранов */
+    @media (max-width: 360px) {
       h2 {
-        font-size: 1.5rem;
-        padding: 15px;
+        font-size: 0.9rem;
+        padding: 8px;
+      }
+      .control-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+      }
+      .map-controls {
+        top: 50px;
+      }
+      #search-container {
+        top: 50px;
       }
     }
   </style>
 </head>
 <body>
   <div id="map-container">
-    <h2>Мониторинг</h2>
+    <h2>Мониторинг мест размещения отходов</h2>
     <div id="map"></div>
     <div class="loading" id="loading">Загрузка карты...</div>
     <div class="error" id="error"></div>
@@ -213,7 +278,7 @@
         </div>
         <div class="form-group">
           <label>Фотография:</label>
-          <input type="file" id="photoUpload" accept="image/*">
+          <input type="file" id="photoUpload" accept="image/*" capture="environment">
           <img id="photoPreview" class="preview-image" style="display: none;">
         </div>
         <div class="form-group">
@@ -231,7 +296,7 @@
       <form id="photoForm">
         <div class="form-group">
           <label>Выберите фото:</label>
-          <input type="file" id="objectPhoto" accept="image/*" required>
+          <input type="file" id="objectPhoto" accept="image/*" capture="environment" required>
           <img id="objectPhotoPreview" class="preview-image" style="display: none;">
         </div>
         <div class="form-group">
@@ -247,13 +312,14 @@
     // Глобальные переменные
     let currentData = [];
     let selectedMarker = null;
-    const API_ENDPOINT = 'api.php'; // Файл для обработки на сервере
+    const API_ENDPOINT = 'api.php';
     let markersLayer = null;
+    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    // Стили для маркеров с разным размером
+    // Стили для маркеров
     const markerStyles = {
       default: {
-        radius: 6,
+        radius: isMobile ? 8 : 6,
         fillColor: "#ff0000",
         color: "#fff",
         weight: 1,
@@ -261,7 +327,7 @@
         fillOpacity: 0.8
       },
       small: {
-        radius: 4,   // Маленький размер для площади < 0.01 га
+        radius: isMobile ? 6 : 4,
         fillColor: "#ff0000",
         color: "#fff",
         weight: 1,
@@ -269,7 +335,7 @@
         fillOpacity: 0.8
       },
       medium: {
-        radius: 8,   // Средний размер для площади 0.01-0.1 га
+        radius: isMobile ? 10 : 8,
         fillColor: "#ff0000",
         color: "#fff",
         weight: 1,
@@ -277,7 +343,7 @@
         fillOpacity: 0.8
       },
       large: {
-        radius: 12,  // Большой размер для площади > 0.1 га
+        radius: isMobile ? 14 : 12,
         fillColor: "#ff0000",
         color: "#fff",
         weight: 1,
@@ -285,7 +351,7 @@
         fillOpacity: 0.8
       },
       notCleaned: {
-        radius: 8,
+        radius: isMobile ? 10 : 8,
         fillColor: "#ff0000",
         color: "#fff",
         weight: 1,
@@ -293,7 +359,7 @@
         fillOpacity: 0.8
       },
       cleaned: {
-        radius: 8,
+        radius: isMobile ? 10 : 8,
         fillColor: "#4CAF50",
         color: "#fff",
         weight: 1,
@@ -302,27 +368,26 @@
       }
     };
 
-    // 1. Инициализация карты с fallback-центром
+    // Инициализация карты
     const map = L.map('map', {
       zoomControl: false,
       touchZoom: true,
-      scrollWheelZoom: true,
+      scrollWheelZoom: !isMobile,
       doubleClickZoom: true,
       boxZoom: false,
       keyboard: true,
-      dragging: true
+      dragging: true,
+      tap: !L.Browser.mobile,
+      zoomSnap: 0.5
     }).setView([60.5, 72.2], 6);
-    
-    console.log("Карта инициализирована");
 
-    // 2. Добавим временный слой OSM для проверки
+    // Добавление базового слоя OSM
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
-    console.log("Добавлен слой OSM");
 
-    // 2. Слои карты Sentinel Hub
-     const baseLayers = {
+    // Слои карты Sentinel Hub
+    const baseLayers = {
       "Спутник": L.tileLayer(
         'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
         'SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR-S2-L1C&' +
@@ -358,25 +423,17 @@
       )
     };
 
-    // 3. Стиль для маркеров
-    const markerStyle = {
-      radius: 8,
-      fillColor: "#ff0000",
-      color: "#fff",
-      weight: 1,
-      opacity: 1,
-      fillOpacity: 0.8
-    };
-
-    // 4. Загрузка данных
+    // Загрузка данных
     async function loadData() {
       const loading = document.getElementById('loading');
       const error = document.getElementById('error');
       
       try {
+        loading.style.display = 'block';
+        
         const response = await fetch('hm_test.json?_=' + Date.now());
         
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) throw new Error(`Ошибка загрузки: ${response.status}`);
         
         const text = await response.text();
         const cleanedText = text
@@ -387,7 +444,7 @@
         currentData = JSON.parse(cleanedText);
         if (!Array.isArray(currentData)) throw new Error("Ожидается массив объектов");
         
-        // Удаляем предыдущий слой маркеров, если он существует
+        // Удаляем предыдущий слой маркеров
         if (markersLayer) {
           map.removeLayer(markersLayer);
         }
@@ -413,7 +470,7 @@
           },
           onEachFeature: (feature, layer) => {
             const props = feature.properties;
-            let popupContent = `<div style="max-width: 300px">`;
+            let popupContent = `<div style="max-width: 300px; font-size: ${isMobile ? '14px' : '12px'}">`;
             popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
             popupContent += `<small>`;
             popupContent += `<b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
@@ -422,7 +479,6 @@
             popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
             popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³<br>`;
             
-            // Показываем фотографии если они есть
             if (props['Прикреплённые файлы']) {
               const images = props['Прикреплённые файлы'].split(';').filter(img => img.trim() !== '');
               if (images.length > 0) {
@@ -433,20 +489,26 @@
               }
             }
             
-            // Кнопка для добавления фото
-            popupContent += `<button onclick="showPhotoModal(${props['ID карточки']})" style="margin-top:10px;">
+            popupContent += `<button onclick="showPhotoModal(${props['ID карточки']})" 
+              style="margin-top:10px; padding: 8px; font-size: ${isMobile ? '14px' : '12px'}">
               <i class="fas fa-camera"></i> Добавить фото
             </button>`;
             
             popupContent += `</small></div>`;
             
-            layer.bindPopup(popupContent);
+            layer.bindPopup(popupContent, {
+              maxWidth: 300,
+              className: isMobile ? 'mobile-popup' : ''
+            });
           }
         }).addTo(map);
         
         // Центрируем карту
         if (currentData.length > 0) {
-          map.fitBounds(markersLayer.getBounds(), { padding: [50, 50] });
+          map.fitBounds(markersLayer.getBounds(), { 
+            padding: [50, 50],
+            maxZoom: isMobile ? 14 : 16
+          });
         }
         
         // Включаем основной слой
@@ -458,13 +520,14 @@
         loading.style.display = 'none';
         error.innerHTML = `
           <strong>Ошибка:</strong> ${err.message}<br><br>
-          <small>Подробности в консоли (F12 → Console)</small>
+          <small>Подробности в консоли</small>
         `;
         error.style.display = 'block';
+        setTimeout(() => error.style.display = 'none', 5000);
       }
     }
 
-    // 5. Управление слоями
+    // Управление слоями
     function setupLayerControls() {
       const satelliteBtn = document.getElementById('satelliteBtn');
       const urbanBtn = document.getElementById('urbanBtn');
@@ -484,17 +547,31 @@
       terrainBtn.addEventListener('click', () => setActiveLayer("Местность"));
     }
 
-    // 6. Мобильные элементы управления
+    // Мобильные элементы управления
     function setupMobileControls() {
       document.getElementById('zoomIn').addEventListener('click', () => map.zoomIn());
       document.getElementById('zoomOut').addEventListener('click', () => map.zoomOut());
       
       document.getElementById('locate').addEventListener('click', () => {
         if (navigator.geolocation) {
+          const loading = document.getElementById('loading');
+          loading.style.display = 'block';
+          loading.textContent = 'Определение местоположения...';
+          
           navigator.geolocation.getCurrentPosition(
-            (pos) => map.flyTo([pos.coords.latitude, pos.coords.longitude], 14),
-            (err) => alert('Геолокация недоступна: ' + err.message),
-            { enableHighAccuracy: true, timeout: 10000 }
+            (pos) => {
+              map.flyTo([pos.coords.latitude, pos.coords.longitude], 14);
+              loading.style.display = 'none';
+            },
+            (err) => {
+              loading.style.display = 'none';
+              alert('Геолокация недоступна: ' + err.message);
+            },
+            { 
+              enableHighAccuracy: true, 
+              timeout: 10000,
+              maximumAge: 0
+            }
           );
         } else {
           alert('Ваш браузер не поддерживает геолокацию');
@@ -502,7 +579,7 @@
       });
     }
 
-    // 7. Добавление нового объекта
+    // Добавление нового объекта
     function setupAddObject() {
       const addModal = document.getElementById('addModal');
       const addForm = document.getElementById('addForm');
@@ -510,19 +587,16 @@
       const photoUpload = document.getElementById('photoUpload');
       const photoPreview = document.getElementById('photoPreview');
       
-      // Показ модального окна
       document.getElementById('addBtn').addEventListener('click', () => {
         addModal.style.display = 'flex';
       });
       
-      // Скрытие модального окна
       cancelAdd.addEventListener('click', () => {
         addModal.style.display = 'none';
         addForm.reset();
         photoPreview.style.display = 'none';
       });
       
-      // Превью фотографии
       photoUpload.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
           const file = e.target.files[0];
@@ -535,20 +609,21 @@
         }
       });
       
-      // Отправка формы
       addForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const loading = document.getElementById('loading');
+        loading.style.display = 'block';
+        loading.textContent = 'Добавление объекта...';
         
         try {
-          // Получаем текущее местоположение
           const position = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
-              timeout: 10000
+              timeout: 15000,
+              maximumAge: 0
             });
           });
           
-          // Создаем новый объект
           const formData = new FormData(addForm);
           const newObj = {
             "ID карточки": Math.max(...currentData.map(item => item['ID карточки']), 0) + 1,
@@ -570,8 +645,8 @@
             "Прикреплённые файлы": ""
           };
           
-          // Если есть фото - загружаем
           if (photoUpload.files.length > 0) {
+            loading.textContent = 'Загрузка фотографии...';
             const photoForm = new FormData();
             photoForm.append('photo', photoUpload.files[0]);
             photoForm.append('id', newObj['ID карточки']);
@@ -587,24 +662,23 @@
             newObj['Прикреплённые файлы'] = result.filename;
           }
           
-          // Добавляем в массив и сохраняем
           currentData.push(newObj);
           await saveData();
           
-          // Обновляем карту
           addModal.style.display = 'none';
           addForm.reset();
           photoPreview.style.display = 'none';
           loadData();
           
         } catch (err) {
+          loading.style.display = 'none';
           alert('Ошибка: ' + err.message);
           console.error(err);
         }
       });
     }
 
-    // 8. Добавление фотографий к существующим объектам
+    // Добавление фотографий
     function setupPhotoUpload() {
       const photoModal = document.getElementById('photoModal');
       const photoForm = document.getElementById('photoForm');
@@ -612,20 +686,17 @@
       const objectPhoto = document.getElementById('objectPhoto');
       const objectPhotoPreview = document.getElementById('objectPhotoPreview');
       
-      // Глобальная функция для показа модального окна
       window.showPhotoModal = (id) => {
         selectedMarker = id;
         photoModal.style.display = 'flex';
       };
       
-      // Скрытие модального окна
       cancelPhoto.addEventListener('click', () => {
         photoModal.style.display = 'none';
         photoForm.reset();
         objectPhotoPreview.style.display = 'none';
       });
       
-      // Превью фотографии
       objectPhoto.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
           const file = e.target.files[0];
@@ -638,9 +709,11 @@
         }
       });
       
-      // Отправка формы
       photoForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const loading = document.getElementById('loading');
+        loading.style.display = 'block';
+        loading.textContent = 'Загрузка фотографии...';
         
         try {
           if (!selectedMarker) throw new Error('Не выбран объект');
@@ -659,7 +732,6 @@
           
           const result = await uploadResponse.json();
           
-          // Обновляем объект
           const objIndex = currentData.findIndex(item => item['ID карточки'] === selectedMarker);
           if (objIndex !== -1) {
             const currentFiles = currentData[objIndex]['Прикреплённые файлы'] || '';
@@ -675,13 +747,14 @@
           objectPhotoPreview.style.display = 'none';
           
         } catch (err) {
+          loading.style.display = 'none';
           alert('Ошибка: ' + err.message);
           console.error(err);
         }
       });
     }
 
-    // 9. Сохранение данных
+    // Сохранение данных
     async function saveData() {
       try {
         const response = await fetch(API_ENDPOINT, {
@@ -703,7 +776,7 @@
       }
     }
 
-    // 11. Поиск объектов
+    // Поиск объектов
     function setupSearch() {
       const searchInput = document.getElementById('search-input');
       const searchResults = document.getElementById('search-results');
@@ -735,7 +808,6 @@
               searchResults.style.display = 'none';
               searchInput.value = '';
               
-              // Открываем попап для найденного маркера
               markersLayer.eachLayer(layer => {
                 if (layer.feature && layer.feature.properties['ID карточки'] === item['ID карточки']) {
                   layer.openPopup();
@@ -754,7 +826,6 @@
         }
       });
       
-      // Скрываем результаты при клике вне поля поиска
       document.addEventListener('click', function(e) {
         if (e.target !== searchInput && e.target !== searchResults) {
           searchResults.style.display = 'none';
@@ -762,8 +833,23 @@
       });
     }
 
-    // 10. Инициализация
+    // Инициализация приложения
     document.addEventListener('DOMContentLoaded', () => {
+      // Оптимизация для мобильных устройств
+      if (isMobile) {
+        // Уменьшаем задержку для тапов
+        L.DomEvent.on(document, 'touchstart', L.DomEvent.stopPropagation);
+        
+        // Увеличиваем зону клика для попапов
+        L.Popup.prototype.options.autoPanPaddingTopLeft = L.point(20, 20);
+        L.Popup.prototype.options.autoPanPaddingBottomRight = L.point(20, 20);
+        
+        // Оптимизация производительности
+        L.DomUtil.setOptions(map, {
+          preferCanvas: true
+        });
+      }
+      
       setupLayerControls();
       setupMobileControls();
       setupAddObject();
