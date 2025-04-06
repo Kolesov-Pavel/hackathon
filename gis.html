@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Инвентаризация и оперативный мониторинг несанкционированных мест размещения отходов</title>
+  <title>Карта объектов мусора</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
@@ -82,6 +82,9 @@
       color: white;
       border-color: #388E3C;
     }
+    .control-btn.color-toggle {
+      background: linear-gradient(45deg, #ff0000, #4CAF50);
+    }
     .mobile-controls {
       position: absolute;
       bottom: 20px;
@@ -114,7 +117,7 @@
       display: block;
       margin-bottom: 5px;
     }
-    .form-group input, .form-group textarea {
+    .form-group input, .form-group textarea, .form-group select {
       width: 100%;
       padding: 8px;
       box-sizing: border-box;
@@ -123,6 +126,11 @@
       max-width: 100%;
       max-height: 200px;
       margin-top: 10px;
+    }
+    button {
+      padding: 8px 15px;
+      margin-right: 10px;
+      cursor: pointer;
     }
     @media (min-width: 768px) {
       h2 {
@@ -134,7 +142,7 @@
 </head>
 <body>
   <div id="map-container">
-    <h2>Инвентаризация и оперативный мониторинг несанкционированных мест размещения отходов</h2>
+    <h2>Карта объектов захламления</h2>
     <div id="map"></div>
     <div class="loading" id="loading">Загрузка карты...</div>
     <div class="error" id="error"></div>
@@ -143,6 +151,9 @@
       <div class="control-btn active" id="satelliteBtn" title="Спутник">🛰</div>
       <div class="control-btn" id="urbanBtn" title="Город">🏙</div>
       <div class="control-btn" id="terrainBtn" title="Местность">⛰</div>
+      <div class="control-btn color-toggle" id="colorToggleBtn" title="Цвет по статусу">
+        <i class="fas fa-palette"></i>
+      </div>
       <div class="control-btn" id="addBtn" title="Добавить объект"><i class="fas fa-plus"></i></div>
     </div>
     
@@ -165,6 +176,10 @@
         <div class="form-group">
           <label>Тип отходов:</label>
           <input type="text" name="Тип отходов" required>
+        </div>
+        <div class="form-group">
+          <label>Площадь (га):</label>
+          <input type="number" name="Площадь, га" step="0.001" min="0" value="0.005">
         </div>
         <div class="form-group">
           <label>Объем (м³):</label>
@@ -206,30 +221,90 @@
     // Глобальные переменные
     let currentData = [];
     let selectedMarker = null;
-    const API_ENDPOINT = 'api.php'; // Файл для обработки на сервере
+    let colorByStatus = false;
+    const API_ENDPOINT = 'api.php';
+    let geoJsonLayer;
+    let map;
 
-    // 1. Инициализация карты с fallback-центром
-    const map = L.map('map', {
-      zoomControl: false,
-      touchZoom: true,
-      scrollWheelZoom: true,
-      doubleClickZoom: true,
-      boxZoom: false,
-      keyboard: true,
-      dragging: true
-    }).setView([60.5, 72.2], 6);
-    
-    console.log("Карта инициализирована");
+    // Стили для маркеров с разным размером и цветом
+    const markerStyles = {
+      small: {
+        radius: 6,   // Для площади < 0.01 га
+        fillColor: "#ff0000",
+        color: "#fff",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+      },
+      medium: {
+        radius: 8,   // Для площади 0.01-0.1 га
+        fillColor: "#ff0000",
+        color: "#fff",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+      },
+      large: {
+        radius: 12,  // Для площади > 0.1 га
+        fillColor: "#ff0000",
+        color: "#fff",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+      },
+      cleaned: {
+        radius: 8,   // Для ликвидированных объектов
+        fillColor: "#4CAF50",
+        color: "#fff",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+      }
+    };
 
-    // 2. Добавим временный слой OSM для проверки
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
-    console.log("Добавлен слой OSM");
+    // Функция для получения стиля маркера
+    function getMarkerStyle(feature) {
+      // Если включен режим цветов по статусу
+      if (colorByStatus && feature.properties['Отметка о ликвидации'] === 'да') {
+        return markerStyles.cleaned;
+      }
+      
+      // Определяем размер по площади
+      const area = parseFloat(feature.properties['Площадь, га']) || 0;
+      
+      if (area < 0.01) return markerStyles.small;
+      if (area < 0.1) return markerStyles.medium;
+      return markerStyles.large;
+    }
 
+    // Обновление всех маркеров
+    function updateMarkersStyle() {
+      map.eachLayer(layer => {
+        if (layer instanceof L.CircleMarker) {
+          const feature = layer.feature;
+          const style = getMarkerStyle(feature);
+          layer.setStyle(style);
+        }
+      });
+    }
 
-    // 2. Слои карты Sentinel Hub
-     const baseLayers = {
+    // Инициализация кнопки переключения цветов
+    function setupColorToggle() {
+      document.getElementById('colorToggleBtn').addEventListener('click', () => {
+        colorByStatus = !colorByStatus;
+        updateMarkersStyle();
+        
+        const btn = document.getElementById('colorToggleBtn');
+        if (colorByStatus) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // Слои карты Sentinel Hub
+    const baseLayers = {
       "Спутник": L.tileLayer(
         'https://services.sentinel-hub.com/ogc/wms/10084d2d-cc90-4fd3-8c37-8c6f72f892b9?' +
         'SERVICE=WMS&REQUEST=GetMap&LAYERS=TRUE-COLOR-S2-L1C&' +
@@ -265,22 +340,15 @@
       )
     };
 
-    // 3. Стиль для маркеров
-    const markerStyle = {
-      radius: 8,
-      fillColor: "#ff0000",
-      color: "#fff",
-      weight: 1,
-      opacity: 1,
-      fillOpacity: 0.8
-    };
-
-    // 4. Загрузка данных
+    // Загрузка данных из hm_test.json
     async function loadData() {
       const loading = document.getElementById('loading');
       const error = document.getElementById('error');
       
       try {
+        loading.style.display = 'block';
+        error.style.display = 'none';
+
         const response = await fetch('hm_test.json?_=' + Date.now());
         
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -293,9 +361,14 @@
         
         currentData = JSON.parse(cleanedText);
         if (!Array.isArray(currentData)) throw new Error("Ожидается массив объектов");
-        
+
+        // Удаляем предыдущий слой, если он существует
+        if (geoJsonLayer) {
+          map.removeLayer(geoJsonLayer);
+        }
+
         // Создаем GeoJSON слой
-        const geoJsonLayer = L.geoJSON({
+        geoJsonLayer = L.geoJSON({
           type: "FeatureCollection",
           features: currentData.map(item => ({
             type: "Feature",
@@ -307,7 +380,8 @@
           }))
         }, {
           pointToLayer: (feature, latlng) => {
-            const marker = L.circleMarker(latlng, markerStyle);
+            const marker = L.circleMarker(latlng, getMarkerStyle(feature));
+            marker.feature = feature;
             marker.on('click', () => {
               selectedMarker = feature.properties['ID карточки'];
             });
@@ -319,10 +393,10 @@
             popupContent += `<b>${props.Наименование || 'Объект'}</b><hr style="margin:5px 0">`;
             popupContent += `<small>`;
             popupContent += `<b>ID:</b> ${props['ID карточки'] || 'нет данных'}<br>`;
-            popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
-            popupContent += `<b>Дата обнаружения:</b> ${props['Дата обнаружения'] || 'нет данных'}<br>`;
-            popupContent += `<b>Тип отходов:</b> ${props['Тип отходов'] || 'нет данных'}<br>`;
+            popupContent += `<b>Статус:</b> <span style="color:${props['Отметка о ликвидации'] === 'да' ? 'green' : 'red'}">${props['Отметка о ликвидации'] === 'да' ? 'Ликвидирован' : 'Не ликвидирован'}</span><br>`;
+            popupContent += `<b>Площадь:</b> ${props['Площадь, га'] || '0'} га<br>`;
             popupContent += `<b>Объем:</b> ${props['Объем, м3'] || 'нет данных'} м³<br>`;
+            popupContent += `<b>Местоположение:</b> ${props.Местоположение || 'нет данных'}<br>`;
             
             // Показываем фотографии если они есть
             if (props['Прикреплённые файлы']) {
@@ -344,8 +418,11 @@
             
             layer.bindPopup(popupContent);
           }
-        }).addTo(map);
-        
+        });
+
+        // Добавляем слой на карту
+        geoJsonLayer.addTo(map);
+
         // Центрируем карту
         if (currentData.length > 0) {
           map.fitBounds(geoJsonLayer.getBounds(), { padding: [50, 50] });
@@ -360,13 +437,16 @@
         loading.style.display = 'none';
         error.innerHTML = `
           <strong>Ошибка:</strong> ${err.message}<br><br>
+          Проверьте:<br>
+          1. Файл hm_test.json в той же папке<br>
+          2. Формат данных (должен быть массив объектов)<br>
           <small>Подробности в консоли (F12 → Console)</small>
         `;
         error.style.display = 'block';
       }
     }
 
-    // 5. Управление слоями
+    // Управление слоями карты
     function setupLayerControls() {
       const satelliteBtn = document.getElementById('satelliteBtn');
       const urbanBtn = document.getElementById('urbanBtn');
@@ -386,7 +466,7 @@
       terrainBtn.addEventListener('click', () => setActiveLayer("Местность"));
     }
 
-    // 6. Мобильные элементы управления
+    // Мобильные элементы управления
     function setupMobileControls() {
       document.getElementById('zoomIn').addEventListener('click', () => map.zoomIn());
       document.getElementById('zoomOut').addEventListener('click', () => map.zoomOut());
@@ -404,7 +484,7 @@
       });
     }
 
-    // 7. Добавление нового объекта
+    // Добавление нового объекта
     function setupAddObject() {
       const addModal = document.getElementById('addModal');
       const addForm = document.getElementById('addForm');
@@ -453,7 +533,7 @@
           // Создаем новый объект
           const formData = new FormData(addForm);
           const newObj = {
-            "ID карточки": Math.max(...currentData.map(item => item['ID карточки']), 0) + 1,
+            "ID карточки": Math.max(...currentData.map(item => item['ID карточки'] || 0), 0) + 1,
             "Наименование": formData.get('Наименование'),
             "№ в реестре": "",
             "Дата обнаружения": new Date().toLocaleDateString('ru-RU'),
@@ -464,7 +544,7 @@
             "Долгота": position.coords.longitude,
             "Широта": position.coords.latitude,
             "Тип отходов": formData.get('Тип отходов'),
-            "Площадь, га": "",
+            "Площадь, га": formData.get('Площадь, га') || "0.005",
             "Объем, м3": formData.get('Объем, м3'),
             "Отметка о ликвидации": "нет",
             "Дата ликвидации": "",
@@ -506,7 +586,7 @@
       });
     }
 
-    // 8. Добавление фотографий к существующим объектам
+    // Добавление фотографий к существующим объектам
     function setupPhotoUpload() {
       const photoModal = document.getElementById('photoModal');
       const photoForm = document.getElementById('photoForm');
@@ -583,7 +663,7 @@
       });
     }
 
-    // 9. Сохранение данных
+    // Сохранение данных
     async function saveData() {
       try {
         const response = await fetch(API_ENDPOINT, {
@@ -605,12 +685,46 @@
       }
     }
 
-    // 10. Инициализация
+    // Инициализация карты
+    function initMap() {
+      if (!document.getElementById('map')) {
+        console.error("Элемент #map не найден");
+        return null;
+      }
+      
+      const mapInstance = L.map('map', {
+        zoomControl: false,
+        touchZoom: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        boxZoom: false,
+        keyboard: true,
+        dragging: true
+      }).setView([60.5, 72.2], 6);
+
+      // Добавляем временный слой OSM для проверки
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(mapInstance);
+
+      return mapInstance;
+    }
+
+    // Инициализация приложения
     document.addEventListener('DOMContentLoaded', () => {
+      // Инициализируем карту
+      map = initMap();
+      if (!map) {
+        console.error("Не удалось инициализировать карту");
+        return;
+      }
+
+      // Инициализируем остальные компоненты
       setupLayerControls();
       setupMobileControls();
       setupAddObject();
       setupPhotoUpload();
+      setupColorToggle();
       loadData();
     });
   </script>
