@@ -1,178 +1,133 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Геолокация и карта</title>
+    <title>Информация об устройстве</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
-        #map { 
-            height: 600px; 
-            width: 100%;
-            border-radius: 15px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-        }
-        body { 
-            margin: 20px; 
+        /* Общие стили */
+        body {
             font-family: 'Segoe UI', sans-serif;
-            max-width: 1200px;
             margin: 20px auto;
+            max-width: 1200px;
+            padding: 20px;
+            background: #f5f5f5;
         }
-        .controls { 
-            margin: 15px 0; 
-            display: flex;
-            gap: 10px;
-        }
-        button {
-            padding: 12px 25px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        #status {
+
+        .info-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
             margin: 15px 0;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .info-card {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        /* Стили карты и кнопок остаются из предыдущего примера */
+        #map { height: 500px; margin: 20px 0; }
+        button { /* ... */ }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <button onclick="saveLocation()">💾 Сохранить позицию</button>
-        <button onclick="clearLocations()">❌ Очистить историю</button>
+    <div class="info-section">
+        <h2>Информация об устройстве</h2>
+        <div class="grid-container" id="device-info"></div>
     </div>
-    <div id="status">Определение местоположения...</div>
-    <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <!-- Остальные элементы (карта, кнопки) из предыдущего примера -->
+
     <script>
-        let map;
-        let currentMarker;
-        const savedMarkers = [];
-        let savedLocations = JSON.parse(localStorage.getItem('locations') || '[]');
+        // Функция для создания элемента информации
+        function createInfoCard(title, content) {
+            const card = document.createElement('div');
+            card.className = 'info-card';
+            card.innerHTML = `<h3>${title}</h3><p>${content}</p>`;
+            return card;
+        }
 
-        // Инициализация карты с городским стилем
-        function initMap(lat = 55.751244, lon = 37.618423) {
-            map = L.map('map').setView([lat, lon], 15);
+        // Сбор информации об устройстве
+        function collectDeviceInfo() {
+            const infoContainer = document.getElementById('device-info');
             
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '© OpenStreetMap, © CartoDB',
-                maxZoom: 19,
-                subdomains: 'abcd'
-            }).addTo(map);
+            // Основная информация
+            const info = {
+                'Браузер': navigator.userAgent,
+                'Платформа': navigator.platform,
+                'Язык': navigator.language,
+                'Онлайн': navigator.onLine ? 'Да' : 'Нет',
+                'Куки': navigator.cookieEnabled ? 'Включены' : 'Выключены',
+                'Экран': `${screen.width}x${screen.height} (${screen.colorDepth} бит)`,
+                'Память': navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'Недоступно',
+                'Ядра CPU': navigator.hardwareConcurrency || 'Недоступно',
+                'Touch Support': navigator.maxTouchPoints > 0 ? 'Да' : 'Нет'
+            };
 
-            if (savedLocations.length > 0) {
-                showSavedLocations();
+            // Добавляем основную информацию
+            for (const [title, content] of Object.entries(info)) {
+                infoContainer.appendChild(createInfoCard(title, content));
             }
-        }
 
-        // Обновление позиции на карте
-        function updatePosition(lat, lon) {
-            if (currentMarker) {
-                map.removeLayer(currentMarker);
+            // Расширенная информация (если доступна)
+            // Батарея
+            if ('getBattery' in navigator) {
+                navigator.getBattery().then(battery => {
+                    const batteryInfo = `
+                        Уровень: ${Math.floor(battery.level * 100)}%<br>
+                        Состояние: ${battery.charging ? 'Заряжается' : 'Не заряжается'}
+                    `;
+                    infoContainer.appendChild(createInfoCard('Батарея', batteryInfo));
+                });
             }
-            
-            currentMarker = L.marker([lat, lon], {
-                icon: L.icon({
-                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41]
-                })
-            }).addTo(map)
-              .bindPopup('Ваше текущее положение')
-              .openPopup();
 
-            map.setView([lat, lon], 15);
-            document.getElementById('status').innerHTML = 
-                `📌 Текущие координаты:<br>Широта: ${lat.toFixed(6)}<br>Долгота: ${lon.toFixed(6)}`;
-        }
-
-        // Сохранение координат
-        function saveLocation() {
-            navigator.geolocation.getCurrentPosition(position => {
-                const newLocation = {
-                    lat: position.coords.latitude,
-                    lon: position.coords.longitude,
-                    timestamp: new Date().toISOString()
-                };
-                
-                savedLocations.push(newLocation);
-                localStorage.setItem('locations', JSON.stringify(savedLocations));
-                showSavedLocations();
-                alert('📍 Позиция сохранена!');
-            }, handleError);
-        }
-
-        // Отображение сохраненных точек
-        function showSavedLocations() {
-            // Удаляем старые маркеры
-            savedMarkers.forEach(marker => map.removeLayer(marker));
-            savedMarkers.length = 0;
-
-            // Добавляем новые
-            savedLocations.forEach((loc, index) => {
-                const marker = L.marker([loc.lat, loc.lon], {
-                    icon: L.icon({
-                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41]
-                    })
-                }).addTo(map)
-                  .bindPopup(`📍 Сохраненная позиция #${index + 1}<br>${new Date(loc.timestamp).toLocaleString()}`);
-                
-                savedMarkers.push(marker);
-            });
-        }
-
-        // Очистка истории
-        function clearLocations() {
-            localStorage.removeItem('locations');
-            savedLocations = [];
-            showSavedLocations();
-            alert('История очищена!');
-        }
-
-        // Обработка ошибок
-        function handleError(error) {
-            let message = '❌ Ошибка получения геолокации: ';
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    message += "Доступ запрещен";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    message += "Данные локации недоступны";
-                    break;
-                case error.TIMEOUT:
-                    message += "Время запроса истекло";
-                    break;
-                default:
-                    message += "Неизвестная ошибка";
+            // Сеть
+            if ('connection' in navigator) {
+                const conn = navigator.connection;
+                const networkInfo = `
+                    Тип: ${conn.effectiveType}<br>
+                    RTT: ${conn.rtt}ms<br>
+                    Скорость: ${conn.downlink} Mbps
+                `;
+                infoContainer.appendChild(createInfoCard('Сеть', networkInfo));
             }
-            document.getElementById('status').textContent = message;
+
+            // Геолокация
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const geoInfo = `
+                        Широта: ${position.coords.latitude}<br>
+                        Долгота: ${position.coords.longitude}<br>
+                        Точность: ${position.coords.accuracy} метров
+                    `;
+                    infoContainer.appendChild(createInfoCard('Геолокация', geoInfo));
+                }, () => {
+                    infoContainer.appendChild(createInfoCard('Геолокация', 'Доступ запрещен'));
+                });
+            }
+
+            // Дополнительные датчики
+            if ('getSensors' in navigator) {
+                navigator.getSensors().then(sensors => {
+                    const sensorsInfo = sensors.map(s => s.name).join(', ');
+                    infoContainer.appendChild(createInfoCard('Датчики', sensorsInfo));
+                });
+            }
         }
 
         // Инициализация при загрузке
         window.onload = () => {
-            initMap();
-            
-            if (navigator.geolocation) {
-                navigator.geolocation.watchPosition(
-                    position => updatePosition(
-                        position.coords.latitude, 
-                        position.coords.longitude
-                    ),
-                    handleError,
-                    {enableHighAccuracy: true, timeout: 5000}
-                );
-            } else {
-                document.getElementById('status').textContent = 
-                    "Ваш браузер не поддерживает геолокацию!";
-            }
+            collectDeviceInfo();
+            // Инициализация карты и других компонентов
         };
     </script>
 </body>
