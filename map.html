@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Геолокация и карта</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map { height: 500px; }
+        body { margin: 20px; font-family: Arial, sans-serif; }
+        .controls { margin-bottom: 10px; }
+        button { padding: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="saveLocation()">Сохранить мои координаты</button>
+        <button onclick="clearLocations()">Очистить историю</button>
+    </div>
+    <div id="map"></div>
+    <div id="status"></div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let currentMarker;
+        let watchId;
+        const savedLocations = JSON.parse(localStorage.getItem('locations') || [];
+
+        // Инициализация карты
+        function initMap(lat = 55.751244, lon = 37.618423) {
+            map = L.map('map').setView([lat, lon], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        }
+
+        // Успешное получение геолокации
+        function geoSuccess(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            if (currentMarker) {
+                map.removeLayer(currentMarker);
+            }
+            
+            currentMarker = L.marker([lat, lon])
+                .addTo(map)
+                .bindPopup('Ваше текущее местоположение')
+                .openPopup();
+            
+            map.setView([lat, lon], 13);
+            document.getElementById('status').textContent = 
+                `Широта: ${lat.toFixed(4)}, Долгота: ${lon.toFixed(4)}`;
+        }
+
+        // Ошибка геолокации
+        function geoError(error) {
+            console.warn('Ошибка геолокации:', error);
+            document.getElementById('status').textContent = 
+                'Ошибка получения местоположения! Разрешите доступ к геолокации.';
+            initMap();
+        }
+
+        // Сохранить координаты
+        function saveLocation() {
+            navigator.geolocation.getCurrentPosition(position => {
+                const newLocation = {
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude,
+                    timestamp: new Date().toISOString()
+                };
+                
+                savedLocations.push(newLocation);
+                localStorage.setItem('locations', JSON.stringify(savedLocations));
+                showSavedLocations();
+            }, geoError);
+        }
+
+        // Показать сохраненные точки
+        function showSavedLocations() {
+            savedLocations.forEach(loc => {
+                L.marker([loc.lat, loc.lon])
+                    .addTo(map)
+                    .bindPopup(`Сохранено: ${new Date(loc.timestamp).toLocaleString()}`);
+            });
+        }
+
+        // Очистить историю
+        function clearLocations() {
+            localStorage.removeItem('locations');
+            savedLocations.length = 0;
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker && layer !== currentMarker) {
+                    map.removeLayer(layer);
+                }
+            });
+        }
+
+        // Инициализация при загрузке
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(geoSuccess, geoError);
+        } else {
+            document.getElementById('status').textContent = 
+                'Геолокация не поддерживается вашим браузером!';
+            initMap();
+        }
+
+        // Показать сохраненные точки при загрузке
+        window.onload = () => {
+            if (savedLocations.length > 0) {
+                showSavedLocations();
+                const lastLoc = savedLocations[savedLocations.length - 1];
+                initMap(lastLoc.lat, lastLoc.lon);
+            }
+        };
+    </script>
+</body>
+</html>
