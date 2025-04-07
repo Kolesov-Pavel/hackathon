@@ -3,31 +3,82 @@
 <head>
     <title>Интерактивная карта</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         #map {
             height: 100vh;
             width: 100%;
+            background: #f0f2f5;
         }
+
         .control-container {
-            position: absolute;
-            top: 10px;
-            right: 10px;
+            position: fixed;
+            top: auto;
+            bottom: 20px;
+            right: 12px;
             z-index: 1000;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 12px;
         }
+
         .control-btn {
-            padding: 8px;
-            background: white;
-            border: 1px solid #ccc;
+            width: 48px;
+            height: 48px;
+            border: none;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             cursor: pointer;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            font-size: 20px;
+            color: #1a73e8;
         }
+
         .control-btn:hover {
-            background: #f4f4f4;
+            background: #f8f9fa;
+            transform: scale(1.05);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        #toggleView {
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        #locateMe {
+            font-size: 28px;
+        }
+
+        @media (max-width: 480px) {
+            .control-container {
+                bottom: 10px;
+                right: 8px;
+                gap: 8px;
+            }
+            
+            .control-btn {
+                width: 44px;
+                height: 44px;
+                font-size: 18px;
+            }
+            
+            #locateMe {
+                font-size: 24px;
+            }
         }
     </style>
 </head>
@@ -35,16 +86,18 @@
     <div id="map"></div>
     
     <div class="control-container">
-        <button class="control-btn" id="toggleView">Спутник</button>
-        <button class="control-btn" id="locateMe">📍</button>
-        <button class="control-btn" id="zoomIn">+</button>
-        <button class="control-btn" id="zoomOut">-</button>
+        <button class="control-btn" id="toggleView" title="Сменить вид">🌍</button>
+        <button class="control-btn" id="locateMe" title="Моё местоположение">📍</button>
+        <button class="control-btn" id="zoomIn" title="Увеличить">+</button>
+        <button class="control-btn" id="zoomOut" title="Уменьшить">-</button>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
         // Инициализация карты
-        const map = L.map('map').setView([55.751244, 37.618423], 13); // Москва по умолчанию
+        const map = L.map('map', {
+            zoomControl: false
+        }).setView([55.751244, 37.618423], 13);
 
         // Слои карты
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -58,16 +111,10 @@
         // Переключение слоев
         let isSatellite = false;
         document.getElementById('toggleView').addEventListener('click', () => {
-            if(isSatellite) {
-                map.removeLayer(satelliteLayer);
-                map.addLayer(osmLayer);
-                document.getElementById('toggleView').textContent = 'Спутник';
-            } else {
-                map.removeLayer(osmLayer);
-                map.addLayer(satelliteLayer);
-                document.getElementById('toggleView').textContent = 'Карта';
-            }
             isSatellite = !isSatellite;
+            map.removeLayer(isSatellite ? osmLayer : satelliteLayer);
+            map.addLayer(isSatellite ? satelliteLayer : osmLayer);
+            document.getElementById('toggleView').textContent = isSatellite ? '🗺️' : '🌍';
         });
 
         // Определение местоположения
@@ -79,10 +126,21 @@
         map.on('locationfound', (e) => {
             if(userMarker) map.removeLayer(userMarker);
             
-            userMarker = L.marker(e.latlng)
-                .bindPopup(`Вы здесь!<br>Широта: ${e.latlng.lat.toFixed(4)}<br>Долгота: ${e.latlng.lng.toFixed(4)}`)
-                .addTo(map)
-                .openPopup();
+            userMarker = L.marker(e.latlng, {
+                icon: L.divIcon({
+                    className: 'user-location-marker',
+                    html: '📍',
+                    iconSize: [40, 40]
+                })
+            })
+            .bindPopup(`<b>Ваше местоположение</b><br>Широта: ${e.latlng.lat.toFixed(4)}<br>Долгота: ${e.latlng.lng.toFixed(4)}`)
+            .addTo(map)
+            .openPopup();
+        });
+
+        // Обработка ошибок геолокации
+        map.on('locationerror', (e) => {
+            alert('Не удалось определить местоположение: ' + e.message);
         });
 
         // Управление масштабом
@@ -93,6 +151,10 @@
         document.getElementById('zoomOut').addEventListener('click', () => {
             map.zoomOut();
         });
+
+        // Адаптация под мобильные устройства
+        map.touchZoom.enable();
+        map.doubleClickZoom.disable();
     </script>
 </body>
 </html>
