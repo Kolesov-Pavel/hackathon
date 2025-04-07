@@ -4,61 +4,95 @@
     <title>Геолокация и карта</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
-        #map { height: 500px; }
-        body { margin: 20px; font-family: Arial, sans-serif; }
-        .controls { margin-bottom: 10px; }
-        button { padding: 10px; cursor: pointer; }
+        #map { 
+            height: 600px; 
+            width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        body { 
+            margin: 20px; 
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+        .controls { 
+            margin: 15px 0; 
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 12px 25px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #status {
+            margin: 15px 0;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="controls">
-        <button onclick="saveLocation()">Сохранить мои координаты</button>
-        <button onclick="clearLocations()">Очистить историю</button>
+        <button onclick="saveLocation()">💾 Сохранить позицию</button>
+        <button onclick="clearLocations()">❌ Очистить историю</button>
     </div>
+    <div id="status">Определение местоположения...</div>
     <div id="map"></div>
-    <div id="status"></div>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
         let map;
         let currentMarker;
-        let watchId;
-        const savedLocations = JSON.parse(localStorage.getItem('locations') || [];
+        const savedMarkers = [];
+        let savedLocations = JSON.parse(localStorage.getItem('locations') || '[]');
 
-        // Инициализация карты
+        // Инициализация карты с городским стилем
         function initMap(lat = 55.751244, lon = 37.618423) {
-            map = L.map('map').setView([lat, lon], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            map = L.map('map').setView([lat, lon], 15);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap, © CartoDB',
+                maxZoom: 19,
+                subdomains: 'abcd'
+            }).addTo(map);
+
+            if (savedLocations.length > 0) {
+                showSavedLocations();
+            }
         }
 
-        // Успешное получение геолокации
-        function geoSuccess(position) {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            
+        // Обновление позиции на карте
+        function updatePosition(lat, lon) {
             if (currentMarker) {
                 map.removeLayer(currentMarker);
             }
             
-            currentMarker = L.marker([lat, lon])
-                .addTo(map)
-                .bindPopup('Ваше текущее местоположение')
-                .openPopup();
-            
-            map.setView([lat, lon], 13);
-            document.getElementById('status').textContent = 
-                `Широта: ${lat.toFixed(4)}, Долгота: ${lon.toFixed(4)}`;
+            currentMarker = L.marker([lat, lon], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41]
+                })
+            }).addTo(map)
+              .bindPopup('Ваше текущее положение')
+              .openPopup();
+
+            map.setView([lat, lon], 15);
+            document.getElementById('status').innerHTML = 
+                `📌 Текущие координаты:<br>Широта: ${lat.toFixed(6)}<br>Долгота: ${lon.toFixed(6)}`;
         }
 
-        // Ошибка геолокации
-        function geoError(error) {
-            console.warn('Ошибка геолокации:', error);
-            document.getElementById('status').textContent = 
-                'Ошибка получения местоположения! Разрешите доступ к геолокации.';
-            initMap();
-        }
-
-        // Сохранить координаты
+        // Сохранение координат
         function saveLocation() {
             navigator.geolocation.getCurrentPosition(position => {
                 const newLocation = {
@@ -70,44 +104,74 @@
                 savedLocations.push(newLocation);
                 localStorage.setItem('locations', JSON.stringify(savedLocations));
                 showSavedLocations();
-            }, geoError);
+                alert('📍 Позиция сохранена!');
+            }, handleError);
         }
 
-        // Показать сохраненные точки
+        // Отображение сохраненных точек
         function showSavedLocations() {
-            savedLocations.forEach(loc => {
-                L.marker([loc.lat, loc.lon])
-                    .addTo(map)
-                    .bindPopup(`Сохранено: ${new Date(loc.timestamp).toLocaleString()}`);
+            // Удаляем старые маркеры
+            savedMarkers.forEach(marker => map.removeLayer(marker));
+            savedMarkers.length = 0;
+
+            // Добавляем новые
+            savedLocations.forEach((loc, index) => {
+                const marker = L.marker([loc.lat, loc.lon], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41]
+                    })
+                }).addTo(map)
+                  .bindPopup(`📍 Сохраненная позиция #${index + 1}<br>${new Date(loc.timestamp).toLocaleString()}`);
+                
+                savedMarkers.push(marker);
             });
         }
 
-        // Очистить историю
+        // Очистка истории
         function clearLocations() {
             localStorage.removeItem('locations');
-            savedLocations.length = 0;
-            map.eachLayer(layer => {
-                if (layer instanceof L.Marker && layer !== currentMarker) {
-                    map.removeLayer(layer);
-                }
-            });
+            savedLocations = [];
+            showSavedLocations();
+            alert('История очищена!');
+        }
+
+        // Обработка ошибок
+        function handleError(error) {
+            let message = '❌ Ошибка получения геолокации: ';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message += "Доступ запрещен";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message += "Данные локации недоступны";
+                    break;
+                case error.TIMEOUT:
+                    message += "Время запроса истекло";
+                    break;
+                default:
+                    message += "Неизвестная ошибка";
+            }
+            document.getElementById('status').textContent = message;
         }
 
         // Инициализация при загрузке
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(geoSuccess, geoError);
-        } else {
-            document.getElementById('status').textContent = 
-                'Геолокация не поддерживается вашим браузером!';
-            initMap();
-        }
-
-        // Показать сохраненные точки при загрузке
         window.onload = () => {
-            if (savedLocations.length > 0) {
-                showSavedLocations();
-                const lastLoc = savedLocations[savedLocations.length - 1];
-                initMap(lastLoc.lat, lastLoc.lon);
+            initMap();
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(
+                    position => updatePosition(
+                        position.coords.latitude, 
+                        position.coords.longitude
+                    ),
+                    handleError,
+                    {enableHighAccuracy: true, timeout: 5000}
+                );
+            } else {
+                document.getElementById('status').textContent = 
+                    "Ваш браузер не поддерживает геолокацию!";
             }
         };
     </script>
